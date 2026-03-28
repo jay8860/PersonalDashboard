@@ -84,22 +84,58 @@ const buildPersonFromDraft = (family, draft) => {
   };
 };
 
-const ModuleShell = ({ activeTab, onTabChange, children }) => (
-  <div className="min-h-screen bg-slate-950 text-white">
-    <div className="fixed left-4 top-4 z-[90] rounded-full border border-white/12 bg-slate-950/88 px-4 py-2 text-sm font-semibold text-white/80 backdrop-blur">
-      Life Atlas
-    </div>
-    <div className="fixed right-4 top-4 z-[90] flex flex-wrap items-center justify-end gap-2">
-      {tabItems.filter((item) => item.id !== activeTab).map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => onTabChange(item.id)}
-          className="rounded-full border border-white/12 bg-slate-950/88 px-4 py-2 text-sm font-semibold text-white/85 backdrop-blur transition hover:bg-white/10"
-        >
-          {item.label}
-        </button>
-      ))}
+const ModuleShell = ({ activeTab, onTabChange, isDark, onToggleTheme, onExportSnapshot, children }) => (
+  <div className={isDark ? 'life-shell min-h-screen bg-[#0f172a] text-white dark' : 'life-shell min-h-screen bg-[#f6f7fb] text-slate-900'}>
+    <div className="pointer-events-none fixed inset-x-0 top-4 z-[120] px-4">
+      <div className="pointer-events-auto mx-auto max-w-[1180px] rounded-[1.5rem] border border-slate-200/85 bg-white/95 p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/86">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[1rem] bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950">
+              <span className="text-sm font-black tracking-tight">LA</span>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-white/45">Personal Command Center</p>
+              <p className="text-sm font-black text-slate-900 dark:text-white">Life Atlas</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {tabItems.map((item) => {
+              const active = item.id === activeTab;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onTabChange(item.id)}
+                  className={active ? 'life-tab life-tab-active' : 'life-tab'}
+                >
+                  <item.icon size={16} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onExportSnapshot}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white/75 dark:hover:bg-white/10"
+            >
+              <Download size={14} />
+              Export
+            </button>
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white/75 dark:hover:bg-white/10"
+            >
+              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+              {isDark ? 'Light' : 'Dark'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
     {children}
   </div>
@@ -384,7 +420,13 @@ function App() {
 
   if (activeTab === 'health') {
     return (
-      <ModuleShell activeTab={activeTab} onTabChange={changeTab}>
+      <ModuleShell
+        activeTab={activeTab}
+        onTabChange={changeTab}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
+        onExportSnapshot={exportSnapshot}
+      >
         <HealthDashboard />
       </ModuleShell>
     );
@@ -392,7 +434,13 @@ function App() {
 
   if (activeTab === 'finance') {
     return (
-      <ModuleShell activeTab={activeTab} onTabChange={changeTab}>
+      <ModuleShell
+        activeTab={activeTab}
+        onTabChange={changeTab}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
+        onExportSnapshot={exportSnapshot}
+      >
         <FinanceDashboard />
       </ModuleShell>
     );

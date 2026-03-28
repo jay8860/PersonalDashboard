@@ -126,11 +126,11 @@
   }
 
   .life-tab {
-    @apply inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white;
+    @apply inline-flex items-center gap-2 rounded-full border border-slate-300/90 bg-white/95 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-950 dark:border-white/10 dark:bg-slate-900/80 dark:text-white/85 dark:hover:bg-slate-800/90 dark:hover:text-white;
   }
 
   .life-tab-active {
-    @apply border-slate-950 bg-slate-950 text-white shadow-sm dark:border-white dark:bg-white dark:text-slate-950;
+    @apply border-slate-950 bg-slate-950 text-white shadow-md dark:border-white dark:bg-white dark:text-slate-950;
   }
 
   .family-grid {
