@@ -551,6 +551,46 @@ function App() {
     });
   };
 
+  const importPortalBackup = async (file) => {
+    let parsed;
+
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      throw new Error('That file is not valid JSON.');
+    }
+
+    const rawDashboard = parsed?.lifeAtlas && typeof parsed.lifeAtlas === 'object'
+      ? parsed.lifeAtlas
+      : parsed;
+
+    if (rawDashboard == null || typeof rawDashboard !== 'object') {
+      throw new Error('This backup does not contain a valid Life Atlas dashboard.');
+    }
+
+    const nextDashboard = stampDashboard(normalizeDashboard(rawDashboard));
+    saveDashboard(nextDashboard);
+    setDashboard(nextDashboard);
+    putPortalState('lifeAtlas', nextDashboard).catch(() => {});
+
+    let financeMessage = '';
+    if (parsed?.financeDashboard && typeof parsed.financeDashboard === 'object') {
+      const nextFinance = replaceStoredProfile(parsed.financeDashboard, { sync: true });
+      setFinanceProfile(nextFinance);
+      financeMessage = nextFinance.statements.length
+        ? ` and ${nextFinance.statements.length} finance statement${nextFinance.statements.length === 1 ? '' : 's'}`
+        : ' and the finance profile';
+    }
+
+    setSearchQuery('');
+    setQuickAddOpen(false);
+    setCustomizeOpen(false);
+    changeTab('family');
+
+    const peopleCount = nextDashboard.family.people.length;
+    return `Imported ${peopleCount} family record${peopleCount === 1 ? '' : 's'}${financeMessage}. Vault file metadata was left unchanged.`;
+  };
+
   const updateProfileField = (field, value) => {
     updateDashboard((current) => {
       const nextProfile = { ...current.profile, [field]: value };
@@ -1133,6 +1173,7 @@ function App() {
                 selectedPersonId: personId,
               },
             }))}
+            onImportBackup={importPortalBackup}
           />
         );
       case 'planner':

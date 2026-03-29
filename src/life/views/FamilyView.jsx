@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GitBranchPlus, Link2, RefreshCcw, ScanSearch, Trash2, UserPlus2, ZoomIn, ZoomOut } from 'lucide-react';
+import { GitBranchPlus, Link2, RefreshCcw, ScanSearch, Trash2, Upload, UserPlus2, ZoomIn, ZoomOut } from 'lucide-react';
 import {
   connectionOptions,
   getCanonicalRelationshipKey,
@@ -13,13 +13,13 @@ import {
 const CARD_WIDTH = 220;
 const CARD_HEIGHT = 132;
 const PARTNER_GAP = 22;
-const UNIT_GAP = 64;
-const SIBLING_GAP = 34;
-const CLUSTER_GAP = 108;
-const ROW_GAP = 248;
-const CANVAS_PADDING_X = 96;
+const UNIT_GAP = 84;
+const SIBLING_GAP = 56;
+const CLUSTER_GAP = 144;
+const ROW_GAP = 284;
+const CANVAS_PADDING_X = 120;
 const CANVAS_PADDING_Y = 88;
-const MIN_CANVAS_WIDTH = 1940;
+const MIN_CANVAS_WIDTH = 2280;
 
 const pairedRelationMatchers = {
   father: 'mother',
@@ -240,10 +240,7 @@ const buildDirectRelationLookup = (family) => {
     return resolved;
   };
 
-  return new Map((family.people || []).map((person) => {
-    const meta = resolve(person.id);
-    return [person.id, { label: meta.label, hindi: meta.hindi }];
-  }));
+  return new Map((family.people || []).map((person) => [person.id, resolve(person.id)]));
 };
 
 const buildOrthogonalPath = (startX, startY, endX, endY) => {
@@ -520,7 +517,7 @@ const buildFamilyLayout = (family) => {
   const displayLinks = new Map();
   const addDisplayLink = (key, payload) => {
     if (!key || displayLinks.has(key)) return;
-    displayLinks.set(key, payload);
+    displayLinks.set(key, { ...payload, key });
   };
 
   people.forEach((person) => {
@@ -630,11 +627,93 @@ const buildFamilyLayout = (family) => {
     generationRows,
     positionedUnits,
     personLayout,
+    personToUnitKey,
     peopleById,
     dedupedRelationships,
     duplicateRelationshipCount,
     familyGroups: orderedFamilyGroups,
     peerLinks,
+    unitByKey: new Map(positionedUnits.map((unit) => [unit.key, unit])),
+  };
+};
+
+const buildFocusState = (family, layout) => {
+  const selectedPersonId = family.selectedPersonId || 'person-self';
+  const selectedUnitKey = layout.personToUnitKey.get(selectedPersonId) || '';
+  const selectedUnit = selectedUnitKey ? layout.unitByKey.get(selectedUnitKey) : null;
+  const parentUnitKeys = new Set();
+  const childUnitKeys = new Set();
+  const spouseIds = new Set();
+
+  if (selectedUnit?.members.length === 2) {
+    selectedUnit.members.forEach((member) => {
+      if (member.id !== selectedPersonId) spouseIds.add(member.id);
+    });
+  }
+
+  layout.familyGroups.forEach((group) => {
+    if (group.childUnitKeys.includes(selectedUnitKey)) {
+      parentUnitKeys.add(group.parentUnitKey);
+    }
+    if (group.parentUnitKey === selectedUnitKey) {
+      group.childUnitKeys.forEach((unitKey) => childUnitKeys.add(unitKey));
+    }
+  });
+
+  const parentIds = new Set();
+  const childIds = new Set();
+
+  parentUnitKeys.forEach((unitKey) => {
+    const unit = layout.unitByKey.get(unitKey);
+    unit?.members.forEach((member) => parentIds.add(member.id));
+  });
+
+  childUnitKeys.forEach((unitKey) => {
+    const unit = layout.unitByKey.get(unitKey);
+    unit?.members.forEach((member) => childIds.add(member.id));
+  });
+
+  const cardRoles = new Map([[selectedPersonId, 'selected']]);
+  const addRole = (ids, role) => {
+    ids.forEach((id) => {
+      if (!id || id === selectedPersonId || cardRoles.has(id)) return;
+      cardRoles.set(id, role);
+    });
+  };
+
+  addRole(parentIds, 'parent');
+  addRole(spouseIds, 'spouse');
+  addRole(childIds, 'child');
+
+  const highlightedFamilyGroupKeys = new Set(
+    layout.familyGroups
+      .filter((group) => group.parentUnitKey === selectedUnitKey || group.childUnitKeys.includes(selectedUnitKey))
+      .map((group) => group.key),
+  );
+
+  const highlightedCoupleUnitKeys = new Set();
+  [selectedUnitKey, ...parentUnitKeys, ...childUnitKeys].forEach((unitKey) => {
+    const unit = layout.unitByKey.get(unitKey);
+    if (unit?.members.length === 2) {
+      highlightedCoupleUnitKeys.add(unitKey);
+    }
+  });
+
+  const highlightedPeerLinkKeys = new Set(
+    layout.peerLinks
+      .filter((link) => link.leftUnitKey === selectedUnitKey || link.rightUnitKey === selectedUnitKey)
+      .map((link) => link.key),
+  );
+
+  return {
+    cardRoles,
+    highlightedFamilyGroupKeys,
+    highlightedCoupleUnitKeys,
+    highlightedPeerLinkKeys,
+    parentCount: parentIds.size,
+    spouseCount: spouseIds.size,
+    childCount: childIds.size,
+    hasBranchFocus: cardRoles.size > 1,
   };
 };
 
@@ -647,20 +726,21 @@ const FamilyView = ({
   onAddRelationship,
   onDeleteRelationship,
   onSelectPerson,
+  onImportBackup,
 }) => {
   const [personDraft, setPersonDraft] = useState(createPersonDraft(family.people));
   const [relationshipDraft, setRelationshipDraft] = useState(createRelationshipDraft(family.people));
   const [bulkText, setBulkText] = useState('');
   const [bulkFeedback, setBulkFeedback] = useState('');
+  const [backupFeedback, setBackupFeedback] = useState('');
+  const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [zoom, setZoom] = useState(0.64);
   const canvasViewportRef = useRef(null);
+  const backupInputRef = useRef(null);
 
   const layout = useMemo(() => buildFamilyLayout(family), [family]);
   const directRelationLookup = useMemo(() => buildDirectRelationLookup(family), [family]);
-  const unitLookup = useMemo(
-    () => new Map(layout.positionedUnits.map((unit) => [unit.key, unit])),
-    [layout.positionedUnits],
-  );
+  const focusState = useMemo(() => buildFocusState(family, layout), [family, layout]);
 
   useEffect(() => {
     setPersonDraft((current) => ({
@@ -741,6 +821,22 @@ const FamilyView = ({
     if (relationshipDraft.sourceId === relationshipDraft.targetId) return;
     onAddRelationship(relationshipDraft);
     setRelationshipDraft(createRelationshipDraft(family.people));
+  };
+
+  const handleBackupImport = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || typeof onImportBackup !== 'function') return;
+
+    setIsImportingBackup(true);
+    try {
+      const message = await onImportBackup(file);
+      setBackupFeedback(message || `Imported ${file.name}.`);
+    } catch (error) {
+      setBackupFeedback(error instanceof Error ? error.message : 'Could not import that backup file.');
+    } finally {
+      setIsImportingBackup(false);
+      event.target.value = '';
+    }
   };
 
   return (
@@ -893,6 +989,50 @@ const FamilyView = ({
               </div>
             ) : null}
           </form>
+        </section>
+
+        <section className="life-panel">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-emerald-500/12 p-3 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200">
+              <Upload size={18} />
+            </div>
+            <div>
+              <p className="life-card-label">Restore backup</p>
+              <h3 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                Load your current portal backup here before refining the tree.
+              </h3>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <p className="text-sm leading-6 text-slate-500 dark:text-white/55">
+              Import the JSON backup you exported from Life Atlas to populate the latest family, profile, fitness, planner, and finance data locally.
+            </p>
+            <input
+              ref={backupInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleBackupImport}
+            />
+            <button
+              type="button"
+              onClick={() => backupInputRef.current?.click()}
+              disabled={isImportingBackup}
+              className="life-secondary-button w-full justify-center"
+            >
+              <Upload size={16} />
+              {isImportingBackup ? 'Importing backup...' : 'Import portal backup JSON'}
+            </button>
+            <p className="text-xs leading-5 text-slate-500 dark:text-white/55">
+              The backup restores the data records. Vault document files stay wherever they were originally stored.
+            </p>
+            {backupFeedback ? (
+              <div className="rounded-[1.2rem] border border-white/80 bg-white/70 px-4 py-3 text-sm text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/8 dark:text-white/70">
+                {backupFeedback}
+              </div>
+            ) : null}
+          </div>
         </section>
 
         <section className="life-panel">
@@ -1160,6 +1300,9 @@ const FamilyView = ({
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               Generational layout, straight lines, and smoother couple-and-child grouping.
             </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-white/55">
+              Click any card to spotlight that person&apos;s spouse, parents, and children so the branch becomes much easier to read.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1180,6 +1323,14 @@ const FamilyView = ({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
+          {focusState.hasBranchFocus ? (
+            <>
+              <span className="tag">{selectedPerson?.name || 'Selected person'} in focus</span>
+              {focusState.spouseCount ? <span className="tag">{focusState.spouseCount} spouse link{focusState.spouseCount === 1 ? '' : 's'}</span> : null}
+              {focusState.parentCount ? <span className="tag">{focusState.parentCount} parent card{focusState.parentCount === 1 ? '' : 's'}</span> : null}
+              {focusState.childCount ? <span className="tag">{focusState.childCount} child card{focusState.childCount === 1 ? '' : 's'}</span> : null}
+            </>
+          ) : null}
           {layout.generationRows.map((generation) => (
             <span key={generation} className="tag">
               {getRowLabel(generation)}
@@ -1222,17 +1373,28 @@ const FamilyView = ({
                       y1={y}
                       x2={endX}
                       y2={y}
-                      stroke="rgba(59, 130, 246, 0.72)"
-                      strokeWidth="3"
+                      stroke={focusState.highlightedCoupleUnitKeys.has(unit.key)
+                        ? 'rgba(79, 70, 229, 0.96)'
+                        : focusState.hasBranchFocus
+                          ? 'rgba(148, 163, 184, 0.24)'
+                          : 'rgba(59, 130, 246, 0.72)'}
+                      strokeWidth={focusState.highlightedCoupleUnitKeys.has(unit.key) ? '4' : '3'}
                       strokeLinecap="round"
                     />
                   );
                 })}
 
                 {layout.familyGroups.map((group, index) => {
-                  const parentUnit = unitLookup.get(group.parentUnitKey);
-                  const childUnits = group.childUnitKeys.map((key) => unitLookup.get(key)).filter(Boolean);
+                  const parentUnit = layout.unitByKey.get(group.parentUnitKey);
+                  const childUnits = group.childUnitKeys.map((key) => layout.unitByKey.get(key)).filter(Boolean);
                   if (!parentUnit || childUnits.length === 0) return null;
+                  const isHighlighted = focusState.highlightedFamilyGroupKeys.has(group.key);
+                  const stroke = isHighlighted
+                    ? 'rgba(37, 99, 235, 0.96)'
+                    : focusState.hasBranchFocus
+                      ? 'rgba(148, 163, 184, 0.28)'
+                      : 'rgba(15, 23, 42, 0.36)';
+                  const strokeWidth = isHighlighted ? '3.5' : '2.5';
 
                   const childTopY = Math.min(...childUnits.map((unit) => unit.topY));
                   const junctionY = parentUnit.bottomY + Math.max(34, Math.min(86, (childTopY - parentUnit.bottomY) * 0.42));
@@ -1244,8 +1406,8 @@ const FamilyView = ({
                       <path
                         key={`family:${group.parentUnitKey}:${childUnit.key}:${index}`}
                         d={path}
-                        stroke="rgba(15, 23, 42, 0.36)"
-                        strokeWidth="2.5"
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeDasharray={group.dashed ? '8 8' : undefined}
@@ -1259,16 +1421,16 @@ const FamilyView = ({
                     <g key={`family-group:${group.key}:${index}`}>
                       <path
                         d={`M ${parentUnit.centerX} ${parentUnit.bottomY} V ${junctionY}`}
-                        stroke="rgba(15, 23, 42, 0.36)"
-                        strokeWidth="2.5"
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeDasharray={group.dashed ? '8 8' : undefined}
                       />
                       <path
                         d={`M ${firstChild.centerX} ${junctionY} H ${lastChild.centerX}`}
-                        stroke="rgba(15, 23, 42, 0.36)"
-                        strokeWidth="2.5"
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeDasharray={group.dashed ? '8 8' : undefined}
@@ -1277,8 +1439,8 @@ const FamilyView = ({
                         <path
                           key={`family-branch:${group.key}:${childUnit.key}`}
                           d={`M ${childUnit.centerX} ${junctionY} V ${childUnit.topY}`}
-                          stroke="rgba(15, 23, 42, 0.36)"
-                          strokeWidth="2.5"
+                          stroke={stroke}
+                          strokeWidth={strokeWidth}
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeDasharray={group.dashed ? '8 8' : undefined}
@@ -1289,17 +1451,22 @@ const FamilyView = ({
                 })}
 
                 {layout.peerLinks.map((link, index) => {
-                  const leftUnit = unitLookup.get(link.leftUnitKey);
-                  const rightUnit = unitLookup.get(link.rightUnitKey);
+                  const leftUnit = layout.unitByKey.get(link.leftUnitKey);
+                  const rightUnit = layout.unitByKey.get(link.rightUnitKey);
                   if (!leftUnit || !rightUnit) return null;
                   const [first, second] = leftUnit.centerX <= rightUnit.centerX ? [leftUnit, rightUnit] : [rightUnit, leftUnit];
                   const path = buildOrthogonalPath(first.centerX, first.centerY, second.centerX, second.centerY);
+                  const isHighlighted = focusState.highlightedPeerLinkKeys.has(link.key);
                   return (
                     <path
                       key={`peer:${first.key}:${second.key}:${index}`}
                       d={path}
-                      stroke="rgba(99, 102, 241, 0.38)"
-                      strokeWidth="2"
+                      stroke={isHighlighted
+                        ? 'rgba(79, 70, 229, 0.82)'
+                        : focusState.hasBranchFocus
+                          ? 'rgba(148, 163, 184, 0.18)'
+                          : 'rgba(99, 102, 241, 0.38)'}
+                      strokeWidth={isHighlighted ? '2.5' : '2'}
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeDasharray={link.dashed ? '8 8' : '4 8'}
@@ -1323,7 +1490,44 @@ const FamilyView = ({
                   {unit.members.map((person, index) => {
                     const relationMeta = directRelationLookup.get(person.id) || getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
                     const isSelected = person.id === family.selectedPersonId;
+                    const cardRole = focusState.cardRoles.get(person.id) || 'default';
+                    const isHighlightedRelative = cardRole === 'spouse' || cardRole === 'parent' || cardRole === 'child';
+                    const shouldDim = focusState.hasBranchFocus && !isSelected && !isHighlightedRelative;
                     const left = index * (CARD_WIDTH + PARTNER_GAP);
+                    const cardClass = isSelected
+                      ? 'absolute rounded-[1.4rem] border border-slate-950 bg-slate-950 p-4 text-left text-white shadow-lg dark:border-white dark:bg-white dark:text-slate-950'
+                      : cardRole === 'spouse'
+                        ? 'absolute rounded-[1.4rem] border border-violet-200 bg-violet-50/92 p-4 text-left text-slate-900 shadow-[0_18px_40px_rgba(124,58,237,0.14)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg dark:border-violet-400/30 dark:bg-violet-500/12 dark:text-white'
+                        : cardRole === 'parent'
+                          ? 'absolute rounded-[1.4rem] border border-sky-200 bg-sky-50/92 p-4 text-left text-slate-900 shadow-[0_18px_40px_rgba(14,165,233,0.14)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg dark:border-sky-400/30 dark:bg-sky-500/12 dark:text-white'
+                          : cardRole === 'child'
+                            ? 'absolute rounded-[1.4rem] border border-emerald-200 bg-emerald-50/92 p-4 text-left text-slate-900 shadow-[0_18px_40px_rgba(16,185,129,0.14)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg dark:border-emerald-400/30 dark:bg-emerald-500/12 dark:text-white'
+                            : shouldDim
+                              ? 'absolute rounded-[1.4rem] border border-white/75 bg-white/70 p-4 text-left text-slate-900 opacity-45 shadow-sm backdrop-blur transition hover:opacity-75 dark:border-white/10 dark:bg-slate-950/72 dark:text-white'
+                              : 'absolute rounded-[1.4rem] border border-white/90 bg-white/82 p-4 text-left text-slate-900 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-slate-950/82 dark:text-white';
+                    const relationClass = isSelected
+                      ? 'mt-1 text-sm font-semibold text-white/85 dark:text-slate-700'
+                      : cardRole === 'spouse'
+                        ? 'mt-1 text-sm font-semibold text-violet-700 dark:text-violet-200'
+                        : cardRole === 'parent'
+                          ? 'mt-1 text-sm font-semibold text-sky-700 dark:text-sky-200'
+                          : cardRole === 'child'
+                            ? 'mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-200'
+                            : 'mt-1 text-sm font-semibold text-slate-500 dark:text-white/60';
+                    const hindiClass = isSelected
+                      ? 'text-xs text-white/65 dark:text-slate-600'
+                      : cardRole === 'spouse'
+                        ? 'text-xs text-violet-500 dark:text-violet-200/75'
+                        : cardRole === 'parent'
+                          ? 'text-xs text-sky-500 dark:text-sky-200/75'
+                          : cardRole === 'child'
+                            ? 'text-xs text-emerald-500 dark:text-emerald-200/75'
+                            : 'text-xs text-slate-400 dark:text-white/40';
+                    const detailsClass = isSelected
+                      ? 'mt-4 space-y-1 text-xs text-white/68 dark:text-slate-600'
+                      : shouldDim
+                        ? 'mt-4 space-y-1 text-xs text-slate-400 dark:text-white/38'
+                        : 'mt-4 space-y-1 text-xs text-slate-500 dark:text-white/52';
 
                     return (
                       <div
@@ -1337,22 +1541,20 @@ const FamilyView = ({
                             onSelectPerson(person.id);
                           }
                         }}
-                        className={isSelected
-                          ? 'absolute rounded-[1.4rem] border border-slate-950 bg-slate-950 p-4 text-left text-white shadow-lg dark:border-white dark:bg-white dark:text-slate-950'
-                          : 'absolute rounded-[1.4rem] border border-white/90 bg-white/82 p-4 text-left text-slate-900 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-slate-950/82 dark:text-white'}
+                        className={cardClass}
                         style={{ left, top: 0, width: CARD_WIDTH, minHeight: CARD_HEIGHT }}
                       >
                         <div className="min-w-0">
                           <p className="truncate text-base font-black tracking-tight">{person.name || 'Unnamed person'}</p>
-                          <p className={isSelected ? 'mt-1 text-sm font-semibold text-white/85 dark:text-slate-700' : 'mt-1 text-sm font-semibold text-slate-500 dark:text-white/60'}>
+                          <p className={relationClass}>
                             {relationMeta.label}
                           </p>
-                          <p className={isSelected ? 'text-xs text-white/65 dark:text-slate-600' : 'text-xs text-slate-400 dark:text-white/40'}>
+                          <p className={hindiClass}>
                             {relationMeta.hindi}
                           </p>
                         </div>
 
-                        <div className={isSelected ? 'mt-4 space-y-1 text-xs text-white/68 dark:text-slate-600' : 'mt-4 space-y-1 text-xs text-slate-500 dark:text-white/52'}>
+                        <div className={detailsClass}>
                           <p>{person.birthYear ? `Born ${person.birthYear}` : 'Birth year not added'}</p>
                           <p>{person.location || 'Location not added'}</p>
                           <p className="line-clamp-2">{person.note || 'Add a note for city, branch, or context.'}</p>
