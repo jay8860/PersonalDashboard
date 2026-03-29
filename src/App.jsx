@@ -197,6 +197,42 @@ const buildPersonFromDraft = (family, draft) => {
   };
 };
 
+const collectFamilyBranchIds = (family, rootIds = []) => {
+  const childrenByAnchor = new Map();
+
+  family.people.forEach((person) => {
+    if (!person.anchorId || person.id === 'person-self') return;
+    const existing = childrenByAnchor.get(person.anchorId) || [];
+    existing.push(person.id);
+    childrenByAnchor.set(person.anchorId, existing);
+  });
+
+  const collected = new Set();
+  const visit = (personId) => {
+    if (!personId || collected.has(personId) || personId === 'person-self') return;
+    collected.add(personId);
+    (childrenByAnchor.get(personId) || []).forEach(visit);
+  };
+
+  rootIds.forEach(visit);
+  return collected;
+};
+
+const findBranchRootsForRelationship = (family, canonicalKey) => {
+  if (!canonicalKey) return [];
+  const peopleById = Object.fromEntries((family.people || []).map((person) => [person.id, person]));
+
+  return (family.people || [])
+    .filter((person) => person.id !== 'person-self' && person.anchorId)
+    .filter((person) => {
+      const anchorPerson = peopleById[person.anchorId];
+      if (!anchorPerson) return false;
+      const autoRelationship = buildAutoRelationship({ person, anchorPerson });
+      return getCanonicalRelationshipKey(autoRelationship) === canonicalKey;
+    })
+    .map((person) => person.id);
+};
+
 const fetchPortalBootstrap = async () => {
   if (portalBootstrapCache) return portalBootstrapCache;
   if (!portalBootstrapPromise) {
@@ -743,14 +779,24 @@ function App() {
 
   const deletePerson = (personId) => {
     if (personId === 'person-self') return;
+    const targetPerson = dashboard.family.people.find((person) => person.id === personId);
+    if (!targetPerson) return;
+
+    const branchIds = collectFamilyBranchIds(dashboard.family, [personId]);
+    const descendantCount = Math.max(0, branchIds.size - 1);
+    const message = descendantCount > 0
+      ? `Delete ${targetPerson.name || 'this person'} from the family tree? This will also remove ${descendantCount} attached descendant${descendantCount === 1 ? '' : 's'}.`
+      : `Delete ${targetPerson.name || 'this person'} from the family tree?`;
+
+    if (!window.confirm(message)) return;
 
     updateDashboard((current) => ({
       ...current,
       family: {
         ...current.family,
-        selectedPersonId: current.family.selectedPersonId === personId ? 'person-self' : current.family.selectedPersonId,
-        people: current.family.people.filter((person) => person.id !== personId),
-        relationships: current.family.relationships.filter((relationship) => relationship.sourceId !== personId && relationship.targetId !== personId),
+        selectedPersonId: branchIds.has(current.family.selectedPersonId) ? 'person-self' : current.family.selectedPersonId,
+        people: current.family.people.filter((person) => !branchIds.has(person.id)),
+        relationships: current.family.relationships.filter((relationship) => !branchIds.has(relationship.sourceId) && !branchIds.has(relationship.targetId)),
       },
     }));
   };
@@ -773,18 +819,40 @@ function App() {
   };
 
   const deleteRelationship = (relationshipId) => {
+    const targetRelationship = dashboard.family.relationships.find((relationship) => relationship.id === relationshipId);
+    if (!targetRelationship) return;
+
+    const targetKey = getCanonicalRelationshipKey(targetRelationship);
+    const branchRootIds = findBranchRootsForRelationship(dashboard.family, targetKey);
+    const branchIds = collectFamilyBranchIds(dashboard.family, branchRootIds);
+    const branchRootNames = [...new Set(branchRootIds
+      .map((personId) => dashboard.family.people.find((person) => person.id === personId)?.name)
+      .filter(Boolean))];
+    const descendantCount = Math.max(0, branchIds.size - branchRootIds.length);
+    const message = branchRootIds.length > 0
+      ? `Delete this relationship? This will also remove ${branchRootNames.join(', ') || 'the linked family member'} from the chart${descendantCount > 0 ? ` and ${descendantCount} attached descendant${descendantCount === 1 ? '' : 's'}` : ''}.`
+      : 'Delete this relationship from the family chart?';
+
+    if (!window.confirm(message)) return;
+
     updateDashboard((current) => {
-      const targetRelationship = current.family.relationships.find((relationship) => relationship.id === relationshipId);
-      const targetKey = getCanonicalRelationshipKey(targetRelationship);
+      const currentTarget = current.family.relationships.find((relationship) => relationship.id === relationshipId);
+      const currentKey = getCanonicalRelationshipKey(currentTarget);
+      const currentBranchRootIds = findBranchRootsForRelationship(current.family, currentKey);
+      const currentBranchIds = collectFamilyBranchIds(current.family, currentBranchRootIds);
+
       return {
         ...current,
         family: {
           ...current.family,
-          relationships: current.family.relationships.filter((relationship) => (
-            targetKey
-              ? getCanonicalRelationshipKey(relationship) !== targetKey
-              : relationship.id !== relationshipId
-          )),
+          selectedPersonId: currentBranchIds.has(current.family.selectedPersonId) ? 'person-self' : current.family.selectedPersonId,
+          people: current.family.people.filter((person) => !currentBranchIds.has(person.id)),
+          relationships: current.family.relationships.filter((relationship) => {
+            if (currentBranchIds.has(relationship.sourceId) || currentBranchIds.has(relationship.targetId)) return false;
+            return currentKey
+              ? getCanonicalRelationshipKey(relationship) !== currentKey
+              : relationship.id !== relationshipId;
+          }),
         },
       };
     });
