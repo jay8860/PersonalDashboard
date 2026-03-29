@@ -13,7 +13,7 @@ const connectPostgres = async () => {
   const sslDisabled = process.env.PGSSLMODE === 'disable' || process.env.PGSSL_DISABLE === 'true';
   pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: sslDisabled ? false : { rejectUnauthorized: false }
+    ssl: sslDisabled ? false : { rejectUnauthorized: false },
   });
   await pgPool.query('SELECT 1');
 };
@@ -40,14 +40,14 @@ const createTablesSqlite = async () => {
       type TEXT,
       data TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
+    )`,
   );
   await run(
     `CREATE TABLE IF NOT EXISTS daily_notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       note_text TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
+    )`,
   );
   await run(
     `CREATE TABLE IF NOT EXISTS medical_timeline (
@@ -58,7 +58,7 @@ const createTablesSqlite = async () => {
       title TEXT NOT NULL,
       details TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
+    )`,
   );
   await run(
     `CREATE TABLE IF NOT EXISTS body_measurements (
@@ -67,7 +67,31 @@ const createTablesSqlite = async () => {
       date_text TEXT,
       measurement_text TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
+    )`,
+  );
+  await run(
+    `CREATE TABLE IF NOT EXISTS portal_state (
+      state_key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    `CREATE TABLE IF NOT EXISTS portal_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      category TEXT,
+      tags_json TEXT,
+      note TEXT,
+      reference_date DATE,
+      family_person_id TEXT,
+      stored_name TEXT NOT NULL,
+      stored_path TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      mime_type TEXT,
+      size_bytes INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
   );
 };
 
@@ -78,14 +102,14 @@ const createTablesPostgres = async () => {
       type TEXT,
       data TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
-    )`
+    )`,
   );
   await run(
     `CREATE TABLE IF NOT EXISTS daily_notes (
       id SERIAL PRIMARY KEY,
       note_text TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
-    )`
+    )`,
   );
   await run(
     `CREATE TABLE IF NOT EXISTS medical_timeline (
@@ -96,7 +120,7 @@ const createTablesPostgres = async () => {
       title TEXT NOT NULL,
       details TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
-    )`
+    )`,
   );
   await run(
     `CREATE TABLE IF NOT EXISTS body_measurements (
@@ -105,7 +129,31 @@ const createTablesPostgres = async () => {
       date_text TEXT,
       measurement_text TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
-    )`
+    )`,
+  );
+  await run(
+    `CREATE TABLE IF NOT EXISTS portal_state (
+      state_key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+  );
+  await run(
+    `CREATE TABLE IF NOT EXISTS portal_documents (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      category TEXT,
+      tags_json TEXT,
+      note TEXT,
+      reference_date DATE,
+      family_person_id TEXT,
+      stored_name TEXT NOT NULL,
+      stored_path TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      mime_type TEXT,
+      size_bytes BIGINT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
   );
 };
 
@@ -116,14 +164,14 @@ async function initDb() {
     try { await run(`ALTER TABLE medical_timeline ALTER COLUMN event_date DROP NOT NULL`); } catch (_) {}
     try { await run(`ALTER TABLE medical_timeline ADD COLUMN IF NOT EXISTS date_text TEXT`); } catch (_) {}
     try { await run(`ALTER TABLE body_measurements ADD COLUMN IF NOT EXISTS date_text TEXT`); } catch (_) {}
+    try { await run(`ALTER TABLE portal_documents ADD COLUMN IF NOT EXISTS family_person_id TEXT`); } catch (_) {}
   } else {
     await initSqlite();
     await createTablesSqlite();
-    // SQLite migration for medical_timeline (make event_date optional + add date_text)
     try {
       const columns = await all(`PRAGMA table_info(medical_timeline)`, []);
-      const hasDateText = columns.some(col => col.name === 'date_text');
-      const eventDateNotNull = columns.some(col => col.name === 'event_date' && col.notnull === 1);
+      const hasDateText = columns.some((col) => col.name === 'date_text');
+      const eventDateNotNull = columns.some((col) => col.name === 'event_date' && col.notnull === 1);
       if (!hasDateText || eventDateNotNull) {
         await run(`BEGIN TRANSACTION`);
         await run(`ALTER TABLE medical_timeline RENAME TO medical_timeline_old`);
@@ -136,11 +184,11 @@ async function initDb() {
             title TEXT NOT NULL,
             details TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          )`
+          )`,
         );
         await run(
           `INSERT INTO medical_timeline (id, event_date, category, title, details, created_at)
-           SELECT id, event_date, category, title, details, created_at FROM medical_timeline_old`
+           SELECT id, event_date, category, title, details, created_at FROM medical_timeline_old`,
         );
         await run(`DROP TABLE medical_timeline_old`);
         await run(`COMMIT`);
@@ -148,6 +196,16 @@ async function initDb() {
     } catch (err) {
       try { await run(`ROLLBACK`); } catch (_) {}
       console.warn('SQLite timeline migration skipped:', err.message);
+    }
+
+    try {
+      const docColumns = await all(`PRAGMA table_info(portal_documents)`, []);
+      const hasFamilyPerson = docColumns.some((col) => col.name === 'family_person_id');
+      if (!hasFamilyPerson) {
+        await run(`ALTER TABLE portal_documents ADD COLUMN family_person_id TEXT`);
+      }
+    } catch (err) {
+      console.warn('SQLite portal_documents migration skipped:', err.message);
     }
   }
 }
@@ -172,7 +230,7 @@ async function run(sql, params = []) {
   }
 
   return new Promise((resolve, reject) => {
-    sqliteDb.run(sql, params, function (err) {
+    sqliteDb.run(sql, params, function onRun(err) {
       if (err) reject(err);
       else resolve({ lastID: this.lastID, changes: this.changes });
     });

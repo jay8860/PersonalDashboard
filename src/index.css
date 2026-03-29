@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -18,8 +18,9 @@
   }
 
   body {
-    @apply antialiased text-slate-900 bg-slate-50 dark:bg-dark-bg dark:text-dark-text transition-colors duration-300;
-    font-family: 'Outfit', sans-serif;
+    @apply antialiased text-slate-900 dark:bg-dark-bg dark:text-dark-text transition-colors duration-300;
+    background-color: #f6f8ff;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
@@ -69,10 +70,6 @@
     @apply control-shell w-full outline-none focus:border-indigo-400 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20;
   }
 
-  .tag {
-    @apply inline-flex items-center gap-2 rounded-full border border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-white/60;
-  }
-
   .data-table {
     @apply min-w-full table-auto text-left text-sm;
   }
@@ -86,27 +83,34 @@
   }
 
   .life-shell {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Sora', 'Plus Jakarta Sans', sans-serif;
   }
 
   .life-kicker {
-    @apply inline-flex items-center rounded-full border border-slate-200/80 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-white/50;
+    @apply inline-flex items-center rounded-full border border-sky-200/80 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700 backdrop-blur dark:border-white/10 dark:bg-white/10 dark:text-sky-100/80;
   }
 
   .life-panel {
-    @apply rounded-[1.6rem] border border-slate-200/80 bg-white/90 p-6 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/70;
+    @apply rounded-[1.8rem] border border-white/70 bg-white/70 p-6 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/60;
+    box-shadow:
+      0 24px 60px rgba(15, 23, 42, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
   }
 
   .life-soft-card {
-    @apply rounded-[1.2rem] border border-slate-200/80 bg-slate-50/90 p-5 shadow-sm dark:border-white/10 dark:bg-white/5;
+    @apply rounded-[1.35rem] border border-white/80 bg-white/70 p-5 backdrop-blur-lg dark:border-white/10 dark:bg-white/10;
+    box-shadow:
+      0 16px 36px rgba(15, 23, 42, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
   }
 
   .life-card-label {
-    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-white/40;
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-white/45;
   }
 
   .life-input {
-    @apply w-full rounded-[1rem] border border-slate-200/90 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-900/5 dark:border-white/10 dark:bg-slate-950/75 dark:text-white dark:focus:border-white/20 dark:focus:ring-white/10;
+    @apply w-full rounded-[1.05rem] border border-white/80 bg-white/75 px-4 py-3 text-sm text-slate-800 outline-none backdrop-blur transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200 dark:border-white/10 dark:bg-slate-950/60 dark:text-white dark:focus:border-sky-400 dark:focus:ring-sky-500/20;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
   }
 
   .life-textarea {
@@ -114,11 +118,14 @@
   }
 
   .life-primary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 dark:text-white;
+    background: linear-gradient(135deg, #111827 0%, #3b82f6 52%, #8b5cf6 100%);
+    box-shadow: 0 16px 32px rgba(59, 130, 246, 0.25);
   }
 
   .life-secondary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white/75 dark:hover:bg-white/10;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/80 bg-white/70 px-5 py-3 text-sm font-semibold text-slate-700 backdrop-blur transition hover:-translate-y-0.5 hover:border-sky-200 dark:border-white/10 dark:bg-white/10 dark:text-white/80 dark:hover:bg-white/10;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
   }
 
   .life-danger-button {
@@ -126,11 +133,18 @@
   }
 
   .life-tab {
-    @apply inline-flex items-center gap-2 rounded-full border border-slate-300/90 bg-white/95 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-950 dark:border-white/10 dark:bg-slate-900/80 dark:text-white/85 dark:hover:bg-slate-800/90 dark:hover:text-white;
+    @apply inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4 py-2.5 text-sm font-semibold text-slate-700 backdrop-blur transition hover:-translate-y-0.5 hover:border-sky-200 hover:text-slate-950 dark:border-white/10 dark:bg-slate-900/70 dark:text-white/80 dark:hover:bg-slate-800/90 dark:hover:text-white;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
   }
 
   .life-tab-active {
-    @apply border-slate-950 bg-slate-950 text-white shadow-md dark:border-white dark:bg-white dark:text-slate-950;
+    @apply border-transparent text-white shadow-md dark:border-white/0 dark:text-white;
+    background: linear-gradient(135deg, #0f172a 0%, #2563eb 52%, #7c3aed 100%);
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/10 dark:text-white/60;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
   }
 
   .family-grid {

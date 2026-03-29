@@ -12,11 +12,20 @@ const { parseExcelHealth } = require('./parsers/excel_parser');
 const { parseECG } = require('./parsers/ecg_parser');
 const { parseCDA } = require('./parsers/cda_parser');
 const { analyzeReport } = require('./services/ai_service');
+const {
+    getPortalState,
+    setPortalState,
+    listPortalDocuments,
+    getPortalDocument,
+    insertPortalDocument,
+    deletePortalDocument,
+} = require('./services/portal_store');
 
 const app = express();
 const port = process.env.PORT || 3001;
 
 console.log("App using API Key starting with:", process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 5) : "UNDEFINED");
+const uploadsRoot = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 
 const sniffFileForCDA = (filePath) => {
     try {
@@ -48,6 +57,22 @@ const escapeCsvValue = (value) => {
     return str;
 };
 
+const normalizeTagsInput = (value) => {
+    if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return [];
+        if (trimmed.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                return Array.isArray(parsed) ? parsed.map((item) => String(item || '').trim()).filter(Boolean) : [];
+            } catch (_) {}
+        }
+        return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+    return [];
+};
+
 const tableColumns = {
     health_data: ['id', 'type', 'data', 'created_at'],
     daily_notes: ['id', 'note_text', 'created_at'],
@@ -70,11 +95,10 @@ app.use('/api', (req, res, next) => {
 // Upload configuration
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, 'uploads');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir);
+        if (!fs.existsSync(uploadsRoot)) {
+            fs.mkdirSync(uploadsRoot, { recursive: true });
         }
-        cb(null, uploadDir);
+        cb(null, uploadsRoot);
     },
     filename: (req, file, cb) => {
         const baseName = path.basename(file.originalname || 'upload');
@@ -337,6 +361,96 @@ app.post('/api/measurements', async (req, res) => {
     }
 });
 
+// Portal state sync
+app.get('/api/portal/state', async (req, res) => {
+    const key = String(req.query.key || 'lifeAtlas').trim();
+    try {
+        const state = await getPortalState(key);
+        res.json(state);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/portal/state', async (req, res) => {
+    const key = String(req.query.key || 'lifeAtlas').trim();
+    const value = req.body?.value ?? req.body ?? {};
+    try {
+        const saved = await setPortalState(key, value);
+        res.json(saved);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Portal document vault
+app.get('/api/portal/documents', async (req, res) => {
+    try {
+        const rows = await listPortalDocuments();
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/portal/documents', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'File required' });
+
+    const title = String(req.body.title || req.file.originalname || '').trim();
+    if (!title) return res.status(400).json({ error: 'Title required' });
+
+    try {
+        const saved = await insertPortalDocument({
+            title,
+            category: String(req.body.category || 'other').trim() || 'other',
+            tags: normalizeTagsInput(req.body.tags),
+            note: String(req.body.note || '').trim() || null,
+            referenceDate: String(req.body.referenceDate || '').trim() || null,
+            familyPersonId: String(req.body.familyPersonId || '').trim() || null,
+            storedName: req.file.filename,
+            storedPath: req.file.path,
+            originalName: req.file.originalname || req.file.filename,
+            mimeType: req.file.mimetype || null,
+            sizeBytes: req.file.size || 0,
+        });
+        res.json(saved);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/portal/documents/:id', async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid document id' });
+
+    try {
+        const removed = await deletePortalDocument(id);
+        if (!removed) return res.status(404).json({ error: 'Document not found' });
+        if (removed.stored_path && fs.existsSync(removed.stored_path)) {
+            try { fs.unlinkSync(removed.stored_path); } catch (_) {}
+        }
+        res.json({ success: true, id });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/portal/documents/:id/download', async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid document id' });
+
+    try {
+        const doc = await getPortalDocument(id);
+        if (!doc) return res.status(404).json({ error: 'Document not found' });
+        if (!doc.stored_path || !fs.existsSync(doc.stored_path)) {
+            return res.status(404).json({ error: 'Stored file not found' });
+        }
+        res.download(doc.stored_path, doc.original_name || doc.title || 'document');
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Export backup (JSON)
 app.get('/api/export/json', async (req, res) => {
     try {
@@ -344,6 +458,8 @@ app.get('/api/export/json', async (req, res) => {
         const notes = await all("SELECT * FROM daily_notes ORDER BY created_at DESC", []);
         const timeline = await all("SELECT * FROM medical_timeline ORDER BY event_date DESC, created_at DESC", []);
         const measurements = await all("SELECT * FROM body_measurements ORDER BY COALESCE(event_date, created_at) DESC", []);
+        const portalStates = await all("SELECT * FROM portal_state ORDER BY updated_at DESC", []);
+        const portalDocuments = await all("SELECT * FROM portal_documents ORDER BY created_at DESC", []);
 
         const payload = {
             exportedAt: new Date().toISOString(),
@@ -352,7 +468,9 @@ app.get('/api/export/json', async (req, res) => {
             health_data: health,
             daily_notes: notes,
             medical_timeline: timeline,
-            body_measurements: measurements
+            body_measurements: measurements,
+            portal_state: portalStates,
+            portal_documents: portalDocuments
         };
 
         const fileName = `health-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -527,6 +645,10 @@ const startServer = async () => {
     try {
         await initDb();
         console.log(`Database initialized (${isPostgres() ? 'Postgres' : 'SQLite'})`);
+        if (!isPostgres()) {
+            console.log(`SQLite path: ${getSqlitePath()}`);
+            console.log(`Uploads path: ${uploadsRoot}`);
+        }
         app.listen(port, () => {
             console.log(`Server running on port ${port}`);
         });

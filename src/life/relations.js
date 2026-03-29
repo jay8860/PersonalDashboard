@@ -59,6 +59,58 @@ const relationBlueprints = {
   custom: { group: 'custom', lineLabel: 'Related to', lineHindi: 'रिश्तेदार' },
 };
 
+const relationGenerationDelta = {
+  self: 0,
+  father: -1,
+  mother: -1,
+  spouse: 0,
+  son: 1,
+  daughter: 1,
+  brother: 0,
+  sister: 0,
+  grandfather: -2,
+  grandmother: -2,
+  uncle: -1,
+  aunt: -1,
+  cousin: 0,
+  nephew: 1,
+  niece: 1,
+  grandson: 2,
+  granddaughter: 2,
+  fatherInLaw: -1,
+  motherInLaw: -1,
+  brotherInLaw: 0,
+  sisterInLaw: 0,
+  friend: 0,
+  custom: 0,
+};
+
+const relationSideBias = {
+  father: -1,
+  mother: 1,
+  spouse: 1,
+  son: -1,
+  daughter: 1,
+  brother: -1,
+  sister: 1,
+  grandfather: -1,
+  grandmother: 1,
+  uncle: -1,
+  aunt: 1,
+  cousin: 0,
+  nephew: -1,
+  niece: 1,
+  grandson: -1,
+  granddaughter: 1,
+  fatherInLaw: -1,
+  motherInLaw: 1,
+  brotherInLaw: -1,
+  sisterInLaw: 1,
+  friend: 0,
+  custom: 0,
+  self: 0,
+};
+
 const offsetPatterns = {
   self: [[0, 0]],
   parent: [[-220, -180], [220, -180], [0, -260], [-420, -180], [420, -180]],
@@ -149,6 +201,85 @@ export const getRelationBlueprint = (value, customLabel = '', customHindi = '') 
   };
 };
 
+export const getRelationGenerationDelta = (value) => relationGenerationDelta[value] ?? 0;
+
+export const getRelationSideBias = (value) => relationSideBias[value] ?? 0;
+
+export const getRelationConnectionType = (value) => {
+  const group = getRelationBlueprint(value).group;
+  if (group === 'spouse') return 'spouse';
+  if (group === 'parent' || group === 'elder') return 'parent';
+  if (group === 'child' || group === 'descendant') return 'child';
+  if (group === 'sibling') return 'sibling';
+  return 'custom';
+};
+
+export const getCanonicalRelationshipKey = (relationship) => {
+  if (!relationship?.sourceId || !relationship?.targetId) return '';
+  const type = relationship.type || 'custom';
+  const left = String(relationship.sourceId);
+  const right = String(relationship.targetId);
+  const normalizedLabel = normalizeLookup(relationship.label || 'custom');
+
+  if (type === 'parent') {
+    return `parent:${left}:${right}`;
+  }
+
+  if (type === 'child') {
+    return `parent:${right}:${left}`;
+  }
+
+  if (type === 'spouse' || type === 'sibling') {
+    return `${type}:${[left, right].sort().join(':')}`;
+  }
+
+  if (type === 'guardian') {
+    return `guardian:${left}:${right}`;
+  }
+
+  if (
+    normalizedLabel.includes('father of')
+    || normalizedLabel.includes('mother of')
+    || normalizedLabel.includes('grandfather of')
+    || normalizedLabel.includes('grandmother of')
+    || normalizedLabel.includes('uncle of')
+    || normalizedLabel.includes('aunt of')
+    || normalizedLabel.includes('father in law of')
+    || normalizedLabel.includes('mother in law of')
+  ) {
+    return `parent:${left}:${right}`;
+  }
+
+  if (
+    normalizedLabel.includes('son of')
+    || normalizedLabel.includes('daughter of')
+    || normalizedLabel.includes('grandson of')
+    || normalizedLabel.includes('granddaughter of')
+    || normalizedLabel.includes('nephew of')
+    || normalizedLabel.includes('niece of')
+    || normalizedLabel.includes('child of')
+  ) {
+    return `parent:${right}:${left}`;
+  }
+
+  if (normalizedLabel.includes('spouse of')) {
+    return `spouse:${[left, right].sort().join(':')}`;
+  }
+
+  if (
+    normalizedLabel.includes('brother of')
+    || normalizedLabel.includes('sister of')
+    || normalizedLabel.includes('cousin of')
+    || normalizedLabel.includes('brother in law of')
+    || normalizedLabel.includes('sister in law of')
+    || normalizedLabel.includes('sibling of')
+  ) {
+    return `sibling:${[left, right].sort().join(':')}`;
+  }
+
+  return `custom:${[left, right].sort().join(':')}:${normalizedLabel}`;
+};
+
 export const suggestFamilyPosition = ({ anchorPerson, relationKey, customLabel = '', customHindi = '', people = [], minX = 32, maxX = 1660, minY = 32, maxY = 1040 }) => {
   const blueprint = getRelationBlueprint(relationKey, customLabel, customHindi);
   const group = blueprint.group || 'custom';
@@ -171,11 +302,12 @@ export const buildAutoRelationship = ({ person, anchorPerson }) => {
   if (person.relationKey === 'self') return null;
 
   const blueprint = getRelationBlueprint(person.relationKey, person.relationLabel, person.relationHindi);
+  const type = getRelationConnectionType(person.relationKey);
   return {
     id: crypto.randomUUID(),
     sourceId: person.id,
     targetId: anchorPerson.id,
-    type: 'custom',
+    type,
     label: blueprint.lineLabel,
     labelHindi: blueprint.lineHindi,
   };

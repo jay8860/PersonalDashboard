@@ -1,194 +1,403 @@
 import { motion } from 'framer-motion';
-import { Activity, ArrowRight, BadgeIndianRupee, Download, Network, UserRound } from 'lucide-react';
-import { format } from 'date-fns';
+import {
+  Activity,
+  ArrowRight,
+  BadgeIndianRupee,
+  CalendarRange,
+  FileArchive,
+  HeartPulse,
+  Network,
+  NotebookPen,
+  Pill,
+  UserRound,
+} from 'lucide-react';
+import { formatCurrency } from '../../finance/utils/format.js';
+import { formatFriendlyDate } from '../dashboardData.js';
 
-const tabCards = [
-  {
-    id: 'profile',
-    title: 'About Me',
-    subtitle: 'Store your personal profile, headline, and life notes in one place.',
-    color: 'from-amber-500/25 via-orange-500/15 to-rose-500/10',
-  },
-  {
-    id: 'family',
-    title: 'Family Tree',
-    subtitle: 'Drag people around, connect them visually, and keep Hindi plus English labels side by side.',
-    color: 'from-emerald-500/25 via-teal-500/15 to-sky-500/10',
-  },
-  {
-    id: 'fitness',
-    title: 'My Fitness',
-    subtitle: 'Track measurements, see trends, and turn check-ins into simple insights.',
-    color: 'from-sky-500/25 via-cyan-500/15 to-indigo-500/10',
-  },
-  {
-    id: 'finance',
-    title: 'Finance Cockpit',
-    subtitle: 'Open the statement dashboard without leaving this project.',
-    color: 'from-violet-500/25 via-fuchsia-500/15 to-indigo-500/10',
-  },
-];
-
-const buildCompletion = (profile) => {
-  const fields = [
-    profile.fullName,
-    profile.headline,
-    profile.birthDate,
-    profile.city,
-    profile.occupation,
-    profile.languages,
-    profile.bio,
-    profile.goals,
-  ];
-  const completed = fields.filter((value) => String(value || '').trim()).length;
-  return Math.round((completed / fields.length) * 100);
+const buildWelcomeLine = (profile) => {
+  const parts = [profile.city, profile.country, profile.occupation].filter(Boolean);
+  return parts.length ? parts.join(' • ') : 'Everything important in one place';
 };
 
-const formatLastCheckIn = (date) => {
-  if (date == null || date === '') return 'No check-in yet';
-  return format(new Date(date), 'dd MMM yyyy');
+const formatWeight = (entry) => {
+  if (!entry?.weightKg) return 'No check-in yet';
+  return `${entry.weightKg} kg`;
 };
 
-const formatWeight = (value) => {
-  if (value == null || value === '') return 'Not set';
-  return Number(value).toFixed(1) + ' kg';
-};
+const HomeOverview = ({
+  dashboardMode,
+  profile,
+  family,
+  planner,
+  fitness,
+  financeOverview,
+  healthTimeline,
+  documents,
+  upcomingBirthdays,
+  weeklyReview,
+  hiddenSections = [],
+  onNavigate,
+  onOpenQuickAdd,
+}) => {
+  const displayName = profile.preferredName?.trim() || profile.fullName?.trim() || 'Life Atlas';
+  const latestFitnessEntry = fitness.entries[0];
+  const activeMedicines = (planner.medicines || []).slice(0, 4);
+  const medicinesVisible = !hiddenSections.includes('medicines');
+  const recentDocuments = (documents || []).slice(0, 4);
+  const topHealthItem = healthTimeline[0];
 
-const HomeOverview = ({ profile, family, fitness, financeSummary, onNavigate, onExport }) => {
-  const latestEntry = fitness.entries[0];
-  const completion = buildCompletion(profile);
-  const displayName = profile.preferredName?.trim() || profile.fullName?.trim() || 'Your personal HQ';
+  const headlineCards = [
+    medicinesVisible ? {
+      title: 'Medicines',
+      value: activeMedicines.length ? `${activeMedicines.length} active` : 'None active',
+      detail: activeMedicines.length ? `${activeMedicines.filter((medicine) => medicine.takenLog?.includes(new Date().toISOString().slice(0, 10))).length} logged today` : 'Add medicines only if useful',
+      icon: Pill,
+      action: () => onNavigate('planner'),
+      actionLabel: 'Manage medicines',
+      panelClass: 'bg-gradient-to-br from-fuchsia-100/80 via-white/70 to-rose-100/65 dark:from-fuchsia-500/12 dark:via-slate-950/70 dark:to-rose-500/10',
+      iconClass: 'bg-fuchsia-500/12 text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-200',
+    } : null,
+    {
+      title: 'This month spend',
+      value: formatCurrency(financeOverview.currentMonthSpend || 0),
+      detail: `Net flow ${formatCurrency(financeOverview.currentMonthNet || 0)}`,
+      icon: BadgeIndianRupee,
+      action: () => onNavigate('finance'),
+      actionLabel: 'Open finance',
+      panelClass: 'bg-gradient-to-br from-emerald-100/80 via-white/70 to-teal-100/65 dark:from-emerald-500/12 dark:via-slate-950/70 dark:to-teal-500/10',
+      iconClass: 'bg-emerald-500/12 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
+    },
+    {
+      title: 'Latest health signal',
+      value: topHealthItem?.title || 'No recent health updates',
+      detail: topHealthItem?.date ? formatFriendlyDate(topHealthItem.date) : 'Upload or log something in Health',
+      icon: HeartPulse,
+      action: () => onNavigate('health'),
+      actionLabel: 'Open health',
+      panelClass: 'bg-gradient-to-br from-amber-100/85 via-white/70 to-orange-100/65 dark:from-amber-500/12 dark:via-slate-950/70 dark:to-orange-500/10',
+      iconClass: 'bg-amber-500/12 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
+    },
+  ].filter(Boolean);
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-[2rem] border border-white/50 bg-white/80 p-6 shadow-premium backdrop-blur-premium dark:border-white/10 dark:bg-white/5 md:p-8">
-        <div className="grid gap-8 xl:grid-cols-[1.1fr,0.9fr]">
-          <div className="space-y-5">
-            <span className="life-kicker">Life Atlas</span>
+      <section className="life-panel relative overflow-hidden">
+        <div className="absolute inset-y-0 right-[-8%] top-[-12%] w-[18rem] rounded-full bg-sky-200/55 blur-[110px] dark:bg-sky-500/12" />
+        <div className="absolute bottom-[-20%] left-[10%] h-48 w-48 rounded-full bg-fuchsia-200/40 blur-[90px] dark:bg-fuchsia-500/10" />
+        <div className="relative grid gap-8 xl:grid-cols-[1.1fr,0.9fr] xl:items-start">
+          <div className="max-w-3xl space-y-5">
+            <span className="life-kicker">Today Home</span>
             <div className="space-y-3">
               <h1 className="max-w-3xl text-4xl font-black tracking-tight text-slate-900 dark:text-white md:text-5xl">
-                One dashboard for you, your family, your fitness, and your money.
+                {displayName}
               </h1>
-              <p className="max-w-2xl text-base leading-7 text-slate-600 dark:text-white/65">
-                Build a private personal command center, keep it deployable on Railway, and grow it over time without
-                needing a database to get started.
+              <p className="text-sm leading-6 text-slate-500 dark:text-white/60">{buildWelcomeLine(profile)}</p>
+              <p className="max-w-2xl text-base leading-8 text-slate-600 dark:text-white/72">
+                This view is meant to stay useful. Keep only what helps you decide, remember, or act.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button type="button" onClick={() => onNavigate('profile')} className="life-primary-button">
-                Personal Details
-                <ArrowRight size={16} />
+              {onOpenQuickAdd ? (
+                <button type="button" onClick={onOpenQuickAdd} className="life-primary-button">
+                  Quick Add
+                  <ArrowRight size={16} />
+                </button>
+              ) : null}
+              <button type="button" onClick={() => onNavigate('planner')} className="life-secondary-button">
+                Planner
               </button>
-              <button type="button" onClick={() => onNavigate('family')} className="life-secondary-button">
-                Family Tree
-              </button>
-              <button type="button" onClick={onExport} className="life-secondary-button">
-                <Download size={16} />
-                Export Snapshot
+              <button type="button" onClick={() => onNavigate('vault')} className="life-secondary-button">
+                Document Vault
               </button>
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="life-soft-card">
-                <p className="life-card-label">Profile owner</p>
-                <p className="mt-2 text-xl font-black text-slate-900 dark:text-white">{displayName}</p>
-                <p className="mt-2 text-sm text-slate-500 dark:text-white/55">
-                  {profile.headline?.trim() || 'Add a headline in About Me so this space feels more like you.'}
-                </p>
-              </div>
-              <div className="life-soft-card">
-                <p className="life-card-label">Latest fitness check-in</p>
-                <p className="mt-2 text-xl font-black text-slate-900 dark:text-white">{formatWeight(latestEntry?.weightKg)}</p>
-                <p className="mt-2 text-sm text-slate-500 dark:text-white/55">{formatLastCheckIn(latestEntry?.date)}</p>
-              </div>
-              <div className="life-soft-card">
-                <p className="life-card-label">Finance records</p>
-                <p className="mt-2 text-xl font-black text-slate-900 dark:text-white">
-                  {financeSummary.statementCount} statement{financeSummary.statementCount === 1 ? '' : 's'}
-                </p>
-                <p className="mt-2 text-sm text-slate-500 dark:text-white/55">
-                  {financeSummary.transactionCount} transactions already available inside the finance tab.
-                </p>
-              </div>
+
+            <div className="flex flex-wrap gap-3">
+              {[
+                `${family.people.length} family records`,
+                `${documents.length} documents ready`,
+                `${healthTimeline.length} health timeline items`,
+              ].map((item) => (
+                <span key={item} className="tag">{item}</span>
+              ))}
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-            {[
-              {
-                title: 'Profile Completeness',
-                value: String(completion) + '%',
-                help: 'Details filled across your bio, goals, and key facts',
-                icon: UserRound,
-              },
-              {
-                title: 'Family Members',
-                value: family.people.length,
-                help: 'People currently placed on your editable family canvas',
-                icon: Network,
-              },
-              {
-                title: 'Fitness Entries',
-                value: fitness.entries.length,
-                help: 'Check-ins stored for charting and progress reviews',
-                icon: Activity,
-              },
-              {
-                title: 'Finance Statements',
-                value: financeSummary.statementCount,
-                help: 'Imported from the built-in bank statement dashboard',
-                icon: BadgeIndianRupee,
-              },
-            ].map((card, index) => (
-              <motion.div
-                key={card.title}
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: index * 0.06 }}
-                className="life-panel"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="life-card-label">{card.title}</p>
-                    <p className="mt-2 text-3xl font-black tracking-tight text-slate-900 dark:text-white">{card.value}</p>
-                    <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-white/55">{card.help}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-100 p-4 text-slate-700 dark:bg-white/10 dark:text-white">
-                    <card.icon size={24} />
-                  </div>
+            <div className="rounded-[2rem] border border-white/80 bg-gradient-to-br from-slate-950 via-sky-700 to-violet-600 p-6 text-white shadow-[0_24px_64px_rgba(37,99,235,0.22)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/55">Weekly pulse</p>
+              <p className="mt-4 text-4xl font-black tracking-tight">
+                {weeklyReview.healthEvents}
+              </p>
+              <p className="mt-3 text-sm leading-6 text-white/72">
+                health updates captured this week
+              </p>
+              <div className="mt-6 flex items-center gap-3">
+                <div className="rounded-full bg-white/12 px-3 py-1 text-xs font-semibold text-white/75">
+                  {weeklyReview.healthEvents} health updates
                 </div>
-              </motion.div>
-            ))}
+                <div className="rounded-full bg-white/12 px-3 py-1 text-xs font-semibold text-white/75">
+                  {weeklyReview.documentsAdded} docs added
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
+              <div className="life-soft-card bg-gradient-to-br from-white/88 via-sky-50/70 to-white/72 dark:from-white/12 dark:via-sky-500/8 dark:to-white/6">
+                <p className="life-card-label">Latest fitness</p>
+                <p className="mt-2 text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                  {formatWeight(latestFitnessEntry)}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                  {latestFitnessEntry?.date ? formatFriendlyDate(latestFitnessEntry.date) : 'Track once and trends begin here'}
+                </p>
+              </div>
+              <div className="life-soft-card bg-gradient-to-br from-white/88 via-fuchsia-50/70 to-white/72 dark:from-white/12 dark:via-fuchsia-500/8 dark:to-white/6">
+                <p className="life-card-label">Mood of the system</p>
+                <p className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                  {activeMedicines.length || recentDocuments.length ? 'Active' : 'Calm'}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                  {(medicinesVisible && activeMedicines.length) || recentDocuments.length
+                    ? 'Your core trackers have live context.'
+                    : 'Nothing urgent right now.'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-4">
-        {tabCards.map((card, index) => (
+        {headlineCards.map((card, index) => (
           <motion.button
-            key={card.id}
+            key={card.title}
             type="button"
-            onClick={() => onNavigate(card.id)}
-            initial={{ opacity: 0, y: 16 }}
+            onClick={card.action}
+            initial={{ opacity: 0, y: 14 }}
             whileInView={{ opacity: 1, y: 0 }}
-            whileHover={{ y: -4 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: index * 0.05 }}
-            className="relative overflow-hidden rounded-[2rem] border border-white/50 bg-white/85 p-6 text-left shadow-premium backdrop-blur-premium dark:border-white/10 dark:bg-white/5"
+            transition={{ duration: 0.3, delay: index * 0.05 }}
+            className={`life-panel text-left transition hover:-translate-y-1 hover:shadow-md ${card.panelClass}`}
           >
-            <div className={['absolute inset-0 bg-gradient-to-br', card.color].join(' ')} />
-            <div className="relative z-10">
-              <p className="life-card-label text-slate-600 dark:text-white/45">Workspace</p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{card.title}</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-white/60">{card.subtitle}</p>
-              <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-slate-900">
-                Open
-                <ArrowRight size={15} />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="life-card-label">{card.title}</p>
+                <p className="mt-3 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{card.value}</p>
+                <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-white/55">{card.detail}</p>
+                <p className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                  {card.actionLabel}
+                  <ArrowRight size={14} />
+                </p>
+              </div>
+              <div className={`rounded-2xl p-3 ${card.iconClass}`}>
+                <card.icon size={18} />
               </div>
             </div>
           </motion.button>
         ))}
       </section>
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
+        <section className="life-panel">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="life-card-label">Today focus</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                What actually needs your attention
+              </h2>
+            </div>
+            <button type="button" onClick={() => onNavigate('review')} className="life-secondary-button px-4 py-2">
+              Weekly Review
+            </button>
+          </div>
+
+          <div className="mt-6 grid gap-4">
+            {(!medicinesVisible || activeMedicines.length === 0) && upcomingBirthdays.length === 0 ? (
+              <div className="life-soft-card">
+                <p className="text-sm leading-6 text-slate-600 dark:text-white/65">
+                  No urgent items right now. Keep this space lean and only track what truly helps.
+                </p>
+              </div>
+            ) : null}
+
+            {medicinesVisible && activeMedicines.map((medicine) => (
+              <div key={medicine.id} className="life-soft-card">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="life-card-label">Medicine</p>
+                    <p className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{medicine.name}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                      {[medicine.dose, medicine.times, medicine.purpose].filter(Boolean).join(' • ') || 'No extra details yet'}
+                    </p>
+                  </div>
+                  <Pill size={18} className="mt-1 text-slate-400 dark:text-white/45" />
+                </div>
+              </div>
+            ))}
+
+            {upcomingBirthdays.slice(0, 3).map((person) => (
+              <div key={person.id} className="life-soft-card">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="life-card-label">Family milestone</p>
+                    <p className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{person.name}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                      Birthday on {formatFriendlyDate(person.nextBirthday)}
+                    </p>
+                  </div>
+                  <Network size={18} className="mt-1 text-slate-400 dark:text-white/45" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="life-panel">
+          <p className="life-card-label">Fast context</p>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            Key signals across your life
+          </h2>
+
+          <div className="mt-6 grid gap-4">
+            <div className="life-soft-card">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="life-card-label">Family</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{family.people.length} people in your tree</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                    {upcomingBirthdays[0]
+                      ? `Next birthday: ${upcomingBirthdays[0].name} on ${formatFriendlyDate(upcomingBirthdays[0].nextBirthday)}`
+                      : 'Add birthdays to make the family tree more practical.'}
+                  </p>
+                </div>
+                <Network size={18} className="mt-1 text-slate-400 dark:text-white/45" />
+              </div>
+            </div>
+
+            <div className="life-soft-card">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="life-card-label">Document vault</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{documents.length} document{documents.length === 1 ? '' : 's'}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                    {recentDocuments[0]
+                      ? `Latest: ${recentDocuments[0].title}`
+                      : 'Store only the documents you will actually need later.'}
+                  </p>
+                </div>
+                <FileArchive size={18} className="mt-1 text-slate-400 dark:text-white/45" />
+              </div>
+            </div>
+
+            <div className="life-soft-card">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="life-card-label">Profile</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900 dark:text-white">
+                    {profile.headline?.trim() || 'Keep your basics current'}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                    {[profile.email, profile.phone].filter(Boolean).join(' • ') || 'Contact details are still empty'}
+                  </p>
+                </div>
+                <UserRound size={18} className="mt-1 text-slate-400 dark:text-white/45" />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
+        <section className="life-panel">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="life-card-label">Recent health timeline</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                Health events in plain language
+              </h2>
+            </div>
+            <button type="button" onClick={() => onNavigate('health')} className="life-secondary-button px-4 py-2">
+              Open Health
+            </button>
+          </div>
+
+          <div className="mt-6 grid gap-4">
+            {healthTimeline.length === 0 ? (
+              <div className="life-soft-card">
+                <p className="text-sm leading-6 text-slate-600 dark:text-white/65">
+                  Upload records or add notes in the health dashboard and the important moments will appear here.
+                </p>
+              </div>
+            ) : (
+              healthTimeline.slice(0, dashboardMode === 'deep' ? 8 : 5).map((item) => (
+                <div key={item.id} className="life-soft-card">
+                  <p className="life-card-label">{item.kind}</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{item.title}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                    {[formatFriendlyDate(item.date), item.description].filter(Boolean).join(' • ')}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="life-panel">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="life-card-label">Outcome summary</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                Finance, fitness, and review at a glance
+              </h2>
+            </div>
+            <button type="button" onClick={() => onNavigate('finance')} className="life-secondary-button px-4 py-2">
+              Open Finance
+            </button>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {[
+              {
+                title: 'Top spend category',
+                value: financeOverview.topSpendCategory?.label || 'Not enough data',
+                detail: financeOverview.topSpendCategory ? formatCurrency(financeOverview.topSpendCategory.amount || 0) : 'Import statements to surface this',
+                icon: BadgeIndianRupee,
+              },
+              {
+                title: 'Largest spend',
+                value: financeOverview.biggestSpend?.merchant || financeOverview.biggestSpend?.narration || 'None yet',
+                detail: financeOverview.biggestSpend ? `${formatCurrency(financeOverview.biggestSpend.amount || 0)} • ${formatFriendlyDate(financeOverview.biggestSpend.date)}` : 'Your standout transaction will show here',
+                icon: CalendarRange,
+              },
+              {
+                title: 'Fitness check-ins',
+                value: String(fitness.entries.length),
+                detail: latestFitnessEntry?.date ? `Latest on ${formatFriendlyDate(latestFitnessEntry.date)}` : 'Add measurements when they matter',
+                icon: Activity,
+              },
+              {
+                title: 'Weekly review',
+                value: `${weeklyReview.healthEvents} health events`,
+                detail: `${weeklyReview.documentsAdded} new docs • ${weeklyReview.fitnessCheckIns} fitness logs`,
+                icon: NotebookPen,
+              },
+            ].map((card) => (
+              <div key={card.title} className="life-soft-card">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="life-card-label">{card.title}</p>
+                    <p className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">{card.value}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">{card.detail}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-100 p-3 text-slate-700 dark:bg-white/10 dark:text-white">
+                    <card.icon size={18} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 };

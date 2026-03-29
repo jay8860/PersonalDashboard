@@ -102,8 +102,8 @@ const metricConfig = {
 };
 
 // --- Main App Component ---
-function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('phd_theme') || 'light');
+function App({ embedded = false, portalOffset = 0, portalIsDark = false }) {
+  const [theme, setTheme] = useState(() => (embedded ? (portalIsDark ? 'dark' : 'light') : localStorage.getItem('phd_theme') || 'light'));
   const [activeTab, setActiveTab] = useState('overview');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -167,11 +167,16 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (embedded) {
+      setTheme(portalIsDark ? 'dark' : 'light');
+      return;
+    }
+
     const root = document.documentElement;
     if (theme === 'dark') root.classList.add('dark');
     else root.classList.remove('dark');
     localStorage.setItem('phd_theme', theme);
-  }, [theme]);
+  }, [embedded, portalIsDark, theme]);
 
   const fetchHistory = async () => {
     try {
@@ -333,6 +338,7 @@ function App() {
   };
 
   const toggleTheme = () => {
+    if (embedded) return;
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
@@ -830,9 +836,14 @@ function App() {
 
   const latestMedicalReport = medicalHistory[0] || null;
   const latestReportVitals = latestMedicalReport?.vitals || [];
+  const sidebarTopInset = embedded ? portalOffset + 12 : 24;
+  const sidebarHeight = embedded ? `calc(100vh - ${portalOffset + 36}px)` : undefined;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans">
+    <div
+      className="min-h-screen bg-[#f8fafc] font-sans"
+      style={embedded ? { minHeight: `calc(100vh - ${portalOffset}px)` } : undefined}
+    >
       <input
         type="file"
         ref={fileInputRef}
@@ -843,7 +854,10 @@ function App() {
       />
 
       {/* Sidebar - Modern Floating Style */}
-      <nav className="fixed left-6 top-6 bottom-6 w-24 lg:w-72 bg-white rounded-[3rem] shadow-2xl z-50 border border-slate-100 flex flex-col p-8 transition-all duration-500 overflow-hidden">
+      <nav
+        className="fixed left-6 top-6 bottom-6 w-24 lg:w-72 bg-white rounded-[3rem] shadow-2xl z-30 border border-slate-100 flex flex-col p-8 transition-all duration-500 overflow-hidden"
+        style={embedded ? { top: sidebarTopInset, bottom: 'auto', height: sidebarHeight } : undefined}
+      >
         <div className="flex items-center gap-4 mb-12">
           <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3 rounded-2xl shadow-lg shadow-blue-500/20 shrink-0">
             <Activity className="text-white w-6 h-6" />
@@ -873,13 +887,20 @@ function App() {
         </div>
 
         <div className="mt-auto space-y-3">
-          <button
-            onClick={toggleTheme}
-            className="w-full flex items-center gap-4 p-5 text-slate-400 hover:bg-slate-50 hover:text-slate-600 rounded-3xl transition-all font-bold"
-          >
-            {theme === 'dark' ? <Sun size={24} /> : <Moon size={24} />}
-            <span className="hidden lg:block text-lg">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-          </button>
+          {embedded ? (
+            <div className="w-full flex items-center gap-4 p-5 text-slate-400 rounded-3xl font-bold">
+              {theme === 'dark' ? <Sun size={24} /> : <Moon size={24} />}
+              <span className="hidden lg:block text-lg">Portal Theme</span>
+            </div>
+          ) : (
+            <button
+              onClick={toggleTheme}
+              className="w-full flex items-center gap-4 p-5 text-slate-400 hover:bg-slate-50 hover:text-slate-600 rounded-3xl transition-all font-bold"
+            >
+              {theme === 'dark' ? <Sun size={24} /> : <Moon size={24} />}
+              <span className="hidden lg:block text-lg">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+            </button>
+          )}
           <button
             onClick={() => handleExport('json')}
             className="w-full flex items-center gap-4 p-5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-3xl transition-all font-bold"
@@ -891,7 +912,7 @@ function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="ml-36 lg:ml-[22rem] mr-6 pt-10 pb-20">
+      <main className={`ml-36 lg:ml-[22rem] mr-6 pb-20 ${embedded ? 'pt-6' : 'pt-10'}`}>
         <div className="max-w-6xl mx-auto">
 
           {/* Top Bar */}

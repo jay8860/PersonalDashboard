@@ -30,18 +30,35 @@ const navItems = [
 
 const themeKey = 'statement-atlas-theme';
 
-const Layout = ({ children, hasData, statementCount, coverageLabel, onExport, onClear }) => {
+const Layout = ({
+  children,
+  hasData,
+  statementCount,
+  coverageLabel,
+  onExport,
+  onClear,
+  embedded = false,
+  portalOffset = 0,
+  portalIsDark = false,
+}) => {
   const [isDark, setIsDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
+  const sidebarTopInset = embedded ? portalOffset + 12 : 0;
+  const sidebarHeight = embedded ? `calc(100vh - ${portalOffset + 24}px)` : undefined;
 
   useEffect(() => {
+    if (embedded) {
+      setIsDark(Boolean(portalIsDark));
+      return;
+    }
+
     const storedTheme = window.localStorage.getItem(themeKey);
     const shouldDark = storedTheme ? storedTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
     setIsDark(shouldDark);
     document.documentElement.classList.toggle('dark', shouldDark);
-  }, []);
+  }, [embedded, portalIsDark]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -65,6 +82,7 @@ const Layout = ({ children, hasData, statementCount, coverageLabel, onExport, on
   }, []);
 
   const toggleTheme = () => {
+    if (embedded) return;
     const next = !isDark;
     setIsDark(next);
     document.documentElement.classList.toggle('dark', next);
@@ -143,22 +161,24 @@ const Layout = ({ children, hasData, statementCount, coverageLabel, onExport, on
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:bg-white/5 dark:text-white/55 dark:hover:bg-white/10"
-          >
-            {isDark ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-500" />}
-            {sidebarOpen || mobileOpen ? (isDark ? 'Light' : 'Dark') : null}
-          </button>
+        <div className={`grid gap-2 ${embedded ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          {!embedded ? (
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:bg-white/5 dark:text-white/55 dark:hover:bg-white/10"
+            >
+              {isDark ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-500" />}
+              {sidebarOpen || mobileOpen ? (isDark ? 'Light' : 'Dark') : null}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onExport}
             disabled={!hasData}
             className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/5 dark:text-white/55 dark:hover:bg-white/10"
           >
-            {sidebarOpen || mobileOpen ? 'Export' : 'Ex'}
+            {embedded ? 'Export finance' : sidebarOpen || mobileOpen ? 'Export' : 'Ex'}
           </button>
         </div>
         <button
@@ -175,7 +195,10 @@ const Layout = ({ children, hasData, statementCount, coverageLabel, onExport, on
   );
 
   return (
-    <div className={`relative flex min-h-screen overflow-hidden transition-colors duration-500 ${isDark ? 'bg-dark-bg dark' : 'bg-slate-50'}`}>
+    <div
+      className={`relative flex min-h-screen overflow-hidden transition-colors duration-500 ${isDark ? 'bg-dark-bg dark' : 'bg-slate-50'}`}
+      style={embedded ? { minHeight: `calc(100vh - ${portalOffset}px)` } : undefined}
+    >
       <div className="pointer-events-none fixed left-[-10%] top-[-10%] h-[38%] w-[38%] rounded-full bg-indigo-500/10 blur-[120px]" />
       <div className="pointer-events-none fixed bottom-[-14%] right-[-8%] h-[34%] w-[34%] rounded-full bg-sky-500/10 blur-[110px]" />
 
@@ -183,7 +206,8 @@ const Layout = ({ children, hasData, statementCount, coverageLabel, onExport, on
         initial={false}
         animate={{ width: sidebarOpen ? 272 : 84 }}
         transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-        className="glass-card fixed z-30 hidden h-full border-r border-slate-200/60 shadow-premium md:block dark:border-white/5"
+        className="glass-card fixed left-0 top-0 z-30 hidden h-full border-r border-slate-200/60 shadow-premium md:block dark:border-white/5"
+        style={embedded ? { top: sidebarTopInset, height: sidebarHeight } : undefined}
       >
         {sidebar}
       </motion.aside>
@@ -204,6 +228,7 @@ const Layout = ({ children, hasData, statementCount, coverageLabel, onExport, on
               exit={{ x: -300 }}
               transition={{ type: 'spring', stiffness: 320, damping: 32 }}
               className="glass-card fixed left-0 top-0 z-50 h-full w-[278px] border-r border-slate-200/60 shadow-2xl dark:border-white/5 md:hidden"
+              style={embedded ? { top: sidebarTopInset, height: sidebarHeight } : undefined}
             >
               <div className="absolute right-4 top-4">
                 <button
@@ -235,13 +260,19 @@ const Layout = ({ children, hasData, statementCount, coverageLabel, onExport, on
             </div>
             <span className="text-base font-black premium-gradient-text">Statement Atlas</span>
           </div>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-white/55"
-          >
-            {isDark ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-500" />}
-          </button>
+          {!embedded ? (
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-white/55"
+            >
+              {isDark ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-500" />}
+            </button>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-white/55">
+              Portal theme
+            </div>
+          )}
         </div>
         {children}
       </main>

@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'statement-atlas-profile-v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export const createEmptyProfile = () => ({
   version: 5,
@@ -178,6 +179,42 @@ const normalizeProfile = (profile) => {
   };
 };
 
+const emitStoredProfileChange = (profile) => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('statement-atlas:changed', { detail: normalizeProfile(profile) }));
+};
+
+const syncStoredProfileToServer = (profile) => {
+  if (typeof window === 'undefined') return;
+  fetch(API_BASE_URL + '/portal/state?key=financeAtlas', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value: normalizeProfile(profile) }),
+  }).catch(() => {});
+};
+
+export const hasMeaningfulProfileData = (profile) => {
+  const next = normalizeProfile(profile);
+  return Boolean(
+    next.statements.length
+    || next.transactions.length
+    || next.rules.length
+    || Object.keys(next.overrides || {}).length
+    || next.dismissedSuggestionKeys.length
+  );
+};
+
+export const replaceStoredProfile = (profile, options = {}) => {
+  if (typeof window === 'undefined') return normalizeProfile(profile);
+  const next = normalizeProfile(profile);
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  emitStoredProfileChange(next);
+  if (options.sync === true) {
+    syncStoredProfileToServer(next);
+  }
+  return next;
+};
+
 export const loadStoredProfile = () => {
   if (typeof window === 'undefined') return createEmptyProfile();
   try {
@@ -189,10 +226,7 @@ export const loadStoredProfile = () => {
   }
 };
 
-export const saveStoredProfile = (profile) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeProfile(profile)));
-};
+export const saveStoredProfile = (profile) => replaceStoredProfile(profile, { sync: true });
 
 export const mergeProfiles = (existingProfile, incomingProfile, mode = 'merge') => {
   const incoming = normalizeProfile(incomingProfile);

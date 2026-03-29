@@ -366,7 +366,7 @@ const SortableHeader = ({ label, sortKey, currentField, currentDirection, defaul
   );
 };
 
-function App() {
+function App({ embedded = false, portalOffset = 0, portalIsDark = false }) {
   const [profile, setProfile] = useState(() => loadStoredProfile());
   const [status, setStatus] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -1023,10 +1023,13 @@ function App() {
       coverageLabel={coverageLabel}
       onExport={handleExport}
       onClear={handleClear}
+      embedded={embedded}
+      portalOffset={portalOffset}
+      portalIsDark={portalIsDark}
     >
       <div className="space-y-8">
         <section id="overview" className="glass-card overflow-hidden rounded-[2.2rem]">
-          <div className="grid gap-6 p-6 md:p-8 xl:grid-cols-[1.25fr_0.9fr]">
+          <div className={embedded ? 'grid gap-6 p-6 md:p-8 2xl:grid-cols-[1.2fr_0.95fr]' : 'grid gap-6 p-6 md:p-8 xl:grid-cols-[1.25fr_0.9fr]'}>
             <div className="space-y-5">
               <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200">
                 <Sparkles size={14} />
@@ -1092,6 +1095,7 @@ function App() {
               importing={importing}
               status={status}
               onImport={handleImport}
+              embedded={embedded}
             />
           </div>
         </section>

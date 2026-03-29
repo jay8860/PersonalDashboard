@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Activity, BedDouble, Droplets, HeartPulse, Scale, TimerReset, Trash2, TrendingUp, Waves, Footprints } from 'lucide-react';
+import { Activity, BedDouble, ChevronDown, ChevronUp, Droplets, HeartPulse, Scale, TimerReset, Trash2, TrendingUp, Waves, Footprints } from 'lucide-react';
 import {
   CartesianGrid,
   ComposedChart,
@@ -47,6 +47,7 @@ const computeBmi = (weightKg, heightCm) => {
 
 const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChange }) => {
   const [entryDraft, setEntryDraft] = useState(createEntryDraft());
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const sortedEntries = [...fitness.entries].sort((left, right) => String(right.date).localeCompare(String(left.date)));
   const timelineData = [...sortedEntries].reverse().map((entry) => ({
     label: entry.date ? format(new Date(entry.date), 'dd MMM') : '',
@@ -122,31 +123,34 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[0.92fr,1.08fr]">
         <section className="life-panel">
-          <div className="flex items-start gap-3">
-            <div className="rounded-2xl bg-slate-100 p-3 text-slate-700 dark:bg-white/10 dark:text-white">
-              <Scale size={18} />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-sky-500/12 p-3 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">
+                <Scale size={18} />
+              </div>
+              <div>
+                <p className="life-card-label">Add a check-in</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                  Core vitals first, advanced measurements only when you need them
+                </h2>
+              </div>
             </div>
-            <div>
-              <p className="life-card-label">Add a check-in</p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                Track body measurements, sleep, effort, and recovery.
-              </h2>
-            </div>
+
+            <button type="button" onClick={() => setShowAdvancedFields((current) => !current)} className="life-secondary-button">
+              {showAdvancedFields ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {showAdvancedFields ? 'Hide advanced' : 'Show advanced'}
+            </button>
           </div>
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               {[
                 ['Date', 'date', 'date'],
                 ['Weight (kg)', 'weightKg', 'number'],
-                ['Body Fat (%)', 'bodyFatPct', 'number'],
                 ['Waist (cm)', 'waistCm', 'number'],
-                ['Chest (cm)', 'chestCm', 'number'],
-                ['Hip (cm)', 'hipCm', 'number'],
-                ['Resting HR', 'restingHeartRate', 'number'],
                 ['Steps', 'steps', 'number'],
                 ['Sleep (hours)', 'sleepHours', 'number'],
                 ['Workout Minutes', 'workoutMinutes', 'number'],
-                ['Water (liters)', 'waterLiters', 'number'],
+                ['Resting HR', 'restingHeartRate', 'number'],
               ].map(([label, key, type]) => (
                 <label key={key} className="space-y-2">
                   <span className="life-card-label">{label}</span>
@@ -159,6 +163,26 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
                 </label>
               ))}
             </div>
+            {showAdvancedFields ? (
+              <div className="grid gap-4 rounded-[1.5rem] border border-white/80 bg-white/55 p-4 backdrop-blur dark:border-white/10 dark:bg-white/6 md:grid-cols-2">
+                {[
+                  ['Body Fat (%)', 'bodyFatPct', 'number'],
+                  ['Chest (cm)', 'chestCm', 'number'],
+                  ['Hip (cm)', 'hipCm', 'number'],
+                  ['Water (liters)', 'waterLiters', 'number'],
+                ].map(([label, key, type]) => (
+                  <label key={key} className="space-y-2">
+                    <span className="life-card-label">{label}</span>
+                    <input
+                      type={type}
+                      value={entryDraft[key]}
+                      onChange={(event) => setEntryDraft((current) => ({ ...current, [key]: event.target.value }))}
+                      className="life-input"
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
             <label className="space-y-2">
               <span className="life-card-label">Notes</span>
               <textarea
