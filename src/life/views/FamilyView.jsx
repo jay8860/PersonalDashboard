@@ -14,6 +14,8 @@ const CARD_WIDTH = 220;
 const CARD_HEIGHT = 132;
 const PARTNER_GAP = 22;
 const UNIT_GAP = 64;
+const SIBLING_GAP = 34;
+const CLUSTER_GAP = 108;
 const ROW_GAP = 248;
 const CANVAS_PADDING_X = 96;
 const CANVAS_PADDING_Y = 88;
@@ -69,6 +71,179 @@ const getRowLabel = (generation) => {
   if (generation === 1) return 'Children and younger generation';
   if (generation >= 2) return 'Grandchildren and next generation';
   return 'Family generation';
+};
+
+const directRelationMetaMap = {
+  self: { label: 'Self', hindi: 'मैं' },
+  father: { label: 'Father', hindi: 'पिता' },
+  mother: { label: 'Mother', hindi: 'माता' },
+  parent: { label: 'Parent', hindi: 'माता-पिता' },
+  spouse: { label: 'Spouse', hindi: 'जीवनसाथी' },
+  son: { label: 'Son', hindi: 'बेटा' },
+  daughter: { label: 'Daughter', hindi: 'बेटी' },
+  child: { label: 'Child', hindi: 'संतान' },
+  brother: { label: 'Brother', hindi: 'भाई' },
+  sister: { label: 'Sister', hindi: 'बहन' },
+  sibling: { label: 'Sibling', hindi: 'भाई / बहन' },
+  grandfather: { label: 'Grandfather', hindi: 'दादा / नाना' },
+  grandmother: { label: 'Grandmother', hindi: 'दादी / नानी' },
+  grandparent: { label: 'Grandparent', hindi: 'दादा-दादी / नाना-नानी' },
+  uncle: { label: 'Uncle', hindi: 'चाचा / मामा / फूफा' },
+  aunt: { label: 'Aunt', hindi: 'चाची / मामी / बुआ / मौसी' },
+  cousin: { label: 'Cousin', hindi: 'कजिन' },
+  nephew: { label: 'Nephew', hindi: 'भतीजा / भांजा' },
+  niece: { label: 'Niece', hindi: 'भतीजी / भांजी' },
+  grandson: { label: 'Grandson', hindi: 'पोता / नाती' },
+  granddaughter: { label: 'Granddaughter', hindi: 'पोती / नातिन' },
+  grandchild: { label: 'Grandchild', hindi: 'पोता / पोती / नाती / नातिन' },
+  fatherInLaw: { label: 'Father-in-law', hindi: 'ससुर' },
+  motherInLaw: { label: 'Mother-in-law', hindi: 'सास' },
+  parentInLaw: { label: 'Parent-in-law', hindi: 'सास / ससुर' },
+  brotherInLaw: { label: 'Brother-in-law', hindi: 'जीजा / देवर / साला' },
+  sisterInLaw: { label: 'Sister-in-law', hindi: 'भाभी / ननद / साली' },
+  siblingInLaw: { label: 'Sibling-in-law', hindi: 'जीजा / भाभी / देवर / ननद / साला / साली' },
+  childInLaw: { label: 'Child-in-law', hindi: 'बहू / दामाद' },
+  friend: { label: 'Friend', hindi: 'मित्र' },
+  custom: { label: 'Family member', hindi: 'परिवार सदस्य' },
+};
+
+const isOneOf = (value, options) => options.includes(value);
+
+const composeParentRelation = (anchorKey, relationKey) => {
+  if (isOneOf(anchorKey, ['self', 'brother', 'sister', 'sibling'])) return relationKey;
+  if (isOneOf(anchorKey, ['spouse', 'brotherInLaw', 'sisterInLaw', 'siblingInLaw'])) {
+    return relationKey === 'father' ? 'fatherInLaw' : 'motherInLaw';
+  }
+  if (isOneOf(anchorKey, ['son', 'daughter', 'child'])) return 'parent';
+  if (isOneOf(anchorKey, ['cousin', 'nephew', 'niece'])) return relationKey === 'father' ? 'uncle' : 'aunt';
+  return relationKey;
+};
+
+const composeChildRelation = (anchorKey, relationKey) => {
+  if (isOneOf(anchorKey, ['self', 'spouse'])) return relationKey;
+  if (isOneOf(anchorKey, ['father', 'mother', 'parent'])) return relationKey === 'son' ? 'brother' : 'sister';
+  if (isOneOf(anchorKey, ['brother', 'sister', 'sibling', 'brotherInLaw', 'sisterInLaw', 'siblingInLaw'])) {
+    return relationKey === 'son' ? 'nephew' : 'niece';
+  }
+  if (isOneOf(anchorKey, ['uncle', 'aunt', 'cousin'])) return 'cousin';
+  if (isOneOf(anchorKey, ['son', 'daughter', 'child'])) return relationKey === 'son' ? 'grandson' : 'granddaughter';
+  return relationKey;
+};
+
+const composeSiblingRelation = (anchorKey, relationKey) => {
+  if (isOneOf(anchorKey, ['self', 'brother', 'sister', 'sibling'])) return relationKey;
+  if (isOneOf(anchorKey, ['father', 'mother', 'parent', 'grandfather', 'grandmother', 'grandparent'])) {
+    return relationKey === 'brother' ? 'uncle' : 'aunt';
+  }
+  if (isOneOf(anchorKey, ['spouse', 'brotherInLaw', 'sisterInLaw', 'siblingInLaw'])) {
+    return relationKey === 'brother' ? 'brotherInLaw' : 'sisterInLaw';
+  }
+  if (isOneOf(anchorKey, ['son', 'daughter', 'child', 'grandson', 'granddaughter', 'grandchild'])) {
+    return relationKey === 'brother' ? 'son' : 'daughter';
+  }
+  if (anchorKey === 'cousin') return 'cousin';
+  return relationKey;
+};
+
+const composeSpouseRelation = (anchorKey) => {
+  if (anchorKey === 'self') return 'spouse';
+  if (isOneOf(anchorKey, ['father', 'mother', 'parent'])) return 'parent';
+  if (isOneOf(anchorKey, ['brother', 'sister', 'sibling'])) return 'siblingInLaw';
+  if (isOneOf(anchorKey, ['son', 'daughter', 'child'])) return 'childInLaw';
+  if (anchorKey === 'uncle') return 'aunt';
+  if (anchorKey === 'aunt') return 'uncle';
+  if (anchorKey === 'grandfather') return 'grandmother';
+  if (anchorKey === 'grandmother') return 'grandfather';
+  if (isOneOf(anchorKey, ['grandparent'])) return 'grandparent';
+  if (isOneOf(anchorKey, ['cousin', 'friend'])) return anchorKey;
+  if (isOneOf(anchorKey, ['fatherInLaw', 'motherInLaw', 'parentInLaw'])) return 'parentInLaw';
+  if (isOneOf(anchorKey, ['brotherInLaw', 'sisterInLaw', 'siblingInLaw'])) return 'siblingInLaw';
+  return 'spouse';
+};
+
+const composeRelationToSelf = (anchorKey, person) => {
+  if (person.id === 'person-self') return 'self';
+
+  switch (person.relationKey) {
+    case 'father':
+    case 'mother':
+      return composeParentRelation(anchorKey, person.relationKey);
+    case 'son':
+    case 'daughter':
+      return composeChildRelation(anchorKey, person.relationKey);
+    case 'brother':
+    case 'sister':
+      return composeSiblingRelation(anchorKey, person.relationKey);
+    case 'spouse':
+      return composeSpouseRelation(anchorKey);
+    case 'grandfather':
+    case 'grandmother':
+      if (isOneOf(anchorKey, ['self', 'brother', 'sister', 'sibling'])) return person.relationKey;
+      return 'grandparent';
+    case 'uncle':
+    case 'aunt':
+      if (isOneOf(anchorKey, ['self', 'brother', 'sister', 'sibling'])) return person.relationKey;
+      if (isOneOf(anchorKey, ['son', 'daughter', 'child'])) return person.relationKey === 'uncle' ? 'brother' : 'sister';
+      return person.relationKey;
+    case 'nephew':
+    case 'niece':
+    case 'cousin':
+    case 'grandson':
+    case 'granddaughter':
+    case 'fatherInLaw':
+    case 'motherInLaw':
+    case 'brotherInLaw':
+    case 'sisterInLaw':
+    case 'friend':
+      return person.relationKey;
+    default:
+      return person.relationKey || 'custom';
+  }
+};
+
+const buildDirectRelationLookup = (family) => {
+  const peopleById = Object.fromEntries((family.people || []).map((person) => [person.id, person]));
+  const cache = new Map();
+
+  const resolve = (personId, trail = new Set()) => {
+    if (cache.has(personId)) return cache.get(personId);
+    const person = peopleById[personId];
+    if (!person) {
+      return { key: 'custom', ...directRelationMetaMap.custom };
+    }
+    if (person.id === 'person-self') {
+      const selfMeta = { key: 'self', ...directRelationMetaMap.self };
+      cache.set(personId, selfMeta);
+      return selfMeta;
+    }
+
+    if (!person.anchorId || trail.has(personId)) {
+      const fallback = getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
+      const next = { key: person.relationKey || 'custom', ...fallback };
+      cache.set(personId, next);
+      return next;
+    }
+
+    const anchor = peopleById[person.anchorId];
+    if (!anchor) {
+      const fallback = getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
+      const next = { key: person.relationKey || 'custom', ...fallback };
+      cache.set(personId, next);
+      return next;
+    }
+
+    const anchorMeta = resolve(anchor.id, new Set([...trail, personId]));
+    const directKey = composeRelationToSelf(anchorMeta.key, person);
+    const next = directRelationMetaMap[directKey] || getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
+    const resolved = { key: directKey, ...next };
+    cache.set(personId, resolved);
+    return resolved;
+  };
+
+  return new Map((family.people || []).map((person) => {
+    const meta = resolve(person.id);
+    return [person.id, { label: meta.label, hindi: meta.hindi }];
+  }));
 };
 
 const buildOrthogonalPath = (startX, startY, endX, endY) => {
@@ -220,77 +395,109 @@ const buildFamilyLayout = (family) => {
     generationRows.map((generation, index) => [generation, CANVAS_PADDING_Y + index * ROW_GAP]),
   );
 
+  const clustersByGeneration = new Map();
+  units.forEach((unit) => {
+    const anchorUnitKey = unit.anchorPersonId ? personToUnitKey.get(unit.anchorPersonId) || '' : '';
+    const clusterKey = anchorUnitKey
+      ? `cluster:${anchorUnitKey}:${unit.generation}`
+      : `cluster:${unit.key}`;
+    const existing = clustersByGeneration.get(clusterKey);
+    if (existing) {
+      existing.units.push(unit);
+      existing.containsSelf = existing.containsSelf || unit.containsSelf;
+      existing.sideBias = (existing.sideBias * (existing.units.length - 1) + unit.sideBias) / existing.units.length;
+      return;
+    }
+
+    clustersByGeneration.set(clusterKey, {
+      key: clusterKey,
+      generation: unit.generation,
+      anchorUnitKey,
+      units: [unit],
+      containsSelf: unit.containsSelf,
+      sideBias: unit.sideBias,
+    });
+  });
+
+  const rowClustersByGeneration = new Map();
+  clustersByGeneration.forEach((cluster) => {
+    const orderedUnits = [...cluster.units].sort((left, right) => (
+      left.sideBias - right.sideBias
+      || left.members.map((member) => member.name).join(' ').localeCompare(right.members.map((member) => member.name).join(' '))
+    ));
+    const innerGap = cluster.anchorUnitKey ? SIBLING_GAP : UNIT_GAP;
+    const width = orderedUnits.reduce((sum, unit) => sum + unit.width, 0) + Math.max(0, orderedUnits.length - 1) * innerGap;
+    const nextCluster = {
+      ...cluster,
+      units: orderedUnits,
+      innerGap,
+      width,
+    };
+    const existingRow = rowClustersByGeneration.get(cluster.generation) || [];
+    existingRow.push(nextCluster);
+    rowClustersByGeneration.set(cluster.generation, existingRow);
+  });
+
   const maxRowWidth = generationRows.reduce((largest, generation) => {
-    const rowUnits = unitsByGeneration.get(generation) || [];
-    const rowWidth = rowUnits.reduce((sum, unit) => sum + unit.width, 0) + Math.max(0, rowUnits.length - 1) * UNIT_GAP;
+    const rowClusters = rowClustersByGeneration.get(generation) || [];
+    const rowWidth = rowClusters.reduce((sum, cluster) => sum + cluster.width, 0) + Math.max(0, rowClusters.length - 1) * CLUSTER_GAP;
     return Math.max(largest, rowWidth);
   }, 0);
   const canvasWidth = Math.max(MIN_CANVAS_WIDTH, maxRowWidth + CANVAS_PADDING_X * 2);
   const canvasHeight = CANVAS_PADDING_Y * 2 + Math.max(0, generationRows.length - 1) * ROW_GAP + CARD_HEIGHT;
 
-  const clusterMembers = new Map();
-  units.forEach((unit) => {
-    const anchorUnitKey = unit.anchorPersonId ? personToUnitKey.get(unit.anchorPersonId) || '' : '';
-    const clusterKey = `${anchorUnitKey || 'root'}:${unit.generation}`;
-    const existing = clusterMembers.get(clusterKey) || [];
-    existing.push(unit);
-    clusterMembers.set(clusterKey, existing);
-  });
-
-  clusterMembers.forEach((cluster) => {
-    cluster.sort((left, right) => (
-      left.sideBias - right.sideBias
-      || left.members.map((member) => member.name).join(' ').localeCompare(right.members.map((member) => member.name).join(' '))
-    ));
-  });
-
   const unitPlacement = new Map();
   [...generationRows]
     .sort((left, right) => Math.abs(left) - Math.abs(right) || left - right)
     .forEach((generation) => {
-      const rowUnits = unitsByGeneration.get(generation) || [];
-      const annotated = rowUnits.map((unit) => {
-        const anchorUnitKey = unit.anchorPersonId ? personToUnitKey.get(unit.anchorPersonId) || '' : '';
-        const clusterKey = `${anchorUnitKey || 'root'}:${unit.generation}`;
-        const cluster = clusterMembers.get(clusterKey) || [unit];
-        const clusterIndex = Math.max(0, cluster.findIndex((candidate) => candidate.key === unit.key));
-        const anchorPlacement = anchorUnitKey ? unitPlacement.get(anchorUnitKey) : null;
-        const spread = Math.max(unit.width + 34, 264);
-        let preferredX = canvasWidth / 2;
+      const rowClusters = (rowClustersByGeneration.get(generation) || [])
+        .map((cluster) => {
+          const anchorPlacement = cluster.anchorUnitKey ? unitPlacement.get(cluster.anchorUnitKey) : null;
+          let preferredCenterX = canvasWidth / 2;
 
-        if (unit.containsSelf) {
-          preferredX = canvasWidth / 2;
-        } else if (anchorPlacement) {
-          preferredX = anchorPlacement.centerX + (clusterIndex - (cluster.length - 1) / 2) * spread + unit.sideBias * 36;
-        } else if (generation === 0) {
-          preferredX = canvasWidth / 2 + unit.sideBias * 260;
-        } else {
-          preferredX = canvasWidth / 2 + unit.sideBias * 220;
-        }
+          if (cluster.containsSelf) {
+            preferredCenterX = canvasWidth / 2;
+          } else if (anchorPlacement) {
+            preferredCenterX = anchorPlacement.centerX + cluster.sideBias * 18;
+          } else if (generation === 0) {
+            preferredCenterX = canvasWidth / 2 + cluster.sideBias * 260;
+          } else {
+            preferredCenterX = canvasWidth / 2 + cluster.sideBias * 220;
+          }
 
-        return { unit, preferredX };
-      }).sort((left, right) => left.preferredX - right.preferredX || left.unit.sideBias - right.unit.sideBias);
+          return {
+            ...cluster,
+            preferredCenterX,
+          };
+        })
+        .sort((left, right) => left.preferredCenterX - right.preferredCenterX || left.sideBias - right.sideBias);
 
-      const totalWidth = annotated.reduce((sum, entry) => sum + entry.unit.width, 0) + Math.max(0, annotated.length - 1) * UNIT_GAP;
-      const averagePreferredX = annotated.length
-        ? annotated.reduce((sum, entry) => sum + entry.preferredX, 0) / annotated.length
+      const totalWidth = rowClusters.reduce((sum, cluster) => sum + cluster.width, 0) + Math.max(0, rowClusters.length - 1) * CLUSTER_GAP;
+      const averagePreferredX = rowClusters.length
+        ? rowClusters.reduce((sum, cluster) => sum + cluster.preferredCenterX, 0) / rowClusters.length
         : canvasWidth / 2;
       const centeredX = clamp(averagePreferredX, CANVAS_PADDING_X + totalWidth / 2, canvasWidth - CANVAS_PADDING_X - totalWidth / 2);
-      let cursorX = centeredX - totalWidth / 2;
+      let clusterCursorX = centeredX - totalWidth / 2;
 
-      annotated.forEach(({ unit }) => {
-        const x = cursorX;
+      rowClusters.forEach((cluster) => {
         const y = rowYByGeneration.get(generation) || CANVAS_PADDING_Y;
-        unitPlacement.set(unit.key, {
-          ...unit,
-          x,
-          y,
-          centerX: x + unit.width / 2,
-          centerY: y + CARD_HEIGHT / 2,
-          topY: y,
-          bottomY: y + CARD_HEIGHT,
+        let unitCursorX = clusterCursorX;
+
+        cluster.units.forEach((unit) => {
+          const x = unitCursorX;
+          unitPlacement.set(unit.key, {
+            ...unit,
+            x,
+            y,
+            centerX: x + unit.width / 2,
+            centerY: y + CARD_HEIGHT / 2,
+            topY: y,
+            bottomY: y + CARD_HEIGHT,
+          });
+          unitCursorX += unit.width + cluster.innerGap;
         });
-        cursorX += unit.width + UNIT_GAP;
+
+        clusterCursorX += cluster.width + CLUSTER_GAP;
       });
     });
 
@@ -384,6 +591,38 @@ const buildFamilyLayout = (family) => {
   });
 
   const duplicateRelationshipCount = Math.max(0, (family.relationships || []).length - dedupedRelationships.length);
+  const familyGroups = new Map();
+  const peerLinks = [];
+
+  [...displayLinks.values()].forEach((link) => {
+    if (link.kind === 'family') {
+      const childPlacement = unitPlacement.get(link.childUnitKey);
+      const groupKey = `${link.parentUnitKey}:${childPlacement?.topY || 0}`;
+      const existing = familyGroups.get(groupKey) || {
+        key: groupKey,
+        parentUnitKey: link.parentUnitKey,
+        childUnitKeys: [],
+        dashed: Boolean(link.dashed),
+      };
+
+      if (!existing.childUnitKeys.includes(link.childUnitKey)) {
+        existing.childUnitKeys.push(link.childUnitKey);
+      }
+
+      existing.dashed = existing.dashed && Boolean(link.dashed);
+      familyGroups.set(groupKey, existing);
+      return;
+    }
+
+    peerLinks.push(link);
+  });
+
+  const orderedFamilyGroups = [...familyGroups.values()].map((group) => ({
+    ...group,
+    childUnitKeys: [...group.childUnitKeys].sort((leftKey, rightKey) => (
+      (unitPlacement.get(leftKey)?.centerX || 0) - (unitPlacement.get(rightKey)?.centerX || 0)
+    )),
+  }));
 
   return {
     canvasWidth,
@@ -394,7 +633,8 @@ const buildFamilyLayout = (family) => {
     peopleById,
     dedupedRelationships,
     duplicateRelationshipCount,
-    links: [...displayLinks.values()],
+    familyGroups: orderedFamilyGroups,
+    peerLinks,
   };
 };
 
@@ -416,6 +656,11 @@ const FamilyView = ({
   const canvasViewportRef = useRef(null);
 
   const layout = useMemo(() => buildFamilyLayout(family), [family]);
+  const directRelationLookup = useMemo(() => buildDirectRelationLookup(family), [family]);
+  const unitLookup = useMemo(
+    () => new Map(layout.positionedUnits.map((unit) => [unit.key, unit])),
+    [layout.positionedUnits],
+  );
 
   useEffect(() => {
     setPersonDraft((current) => ({
@@ -452,6 +697,9 @@ const FamilyView = ({
 
   const selectedPerson = family.people.find((person) => person.id === family.selectedPersonId) || family.people[0];
   const selectedAnchor = selectedPerson?.anchorId ? layout.peopleById[selectedPerson.anchorId] : null;
+  const selectedRelationMeta = selectedPerson
+    ? directRelationLookup.get(selectedPerson.id) || getRelationMeta(selectedPerson.relationKey, selectedPerson.relationLabel, selectedPerson.relationHindi)
+    : null;
 
   const handlePersonSubmit = (event) => {
     event.preventDefault();
@@ -766,9 +1014,9 @@ const FamilyView = ({
               <div>
                 <p className="text-xl font-black text-slate-900 dark:text-white">{selectedPerson.name || 'Unnamed person'}</p>
                 <p className="mt-2 text-sm text-slate-500 dark:text-white/55">
-                  {getRelationMeta(selectedPerson.relationKey, selectedPerson.relationLabel, selectedPerson.relationHindi).label}
+                  {selectedRelationMeta?.label || getRelationMeta(selectedPerson.relationKey, selectedPerson.relationLabel, selectedPerson.relationHindi).label}
                   {' • '}
-                  {getRelationMeta(selectedPerson.relationKey, selectedPerson.relationLabel, selectedPerson.relationHindi).hindi}
+                  {selectedRelationMeta?.hindi || getRelationMeta(selectedPerson.relationKey, selectedPerson.relationLabel, selectedPerson.relationHindi).hindi}
                 </p>
                 <p className="mt-1 text-xs text-slate-400 dark:text-white/35">
                   Linked to: {selectedAnchor?.name || 'No linked person'}
@@ -961,28 +1209,68 @@ const FamilyView = ({
                   );
                 })}
 
-                {layout.links.map((link, index) => {
-                  if (link.kind === 'family') {
-                    const parentUnit = layout.positionedUnits.find((unit) => unit.key === link.parentUnitKey);
-                    const childUnit = layout.positionedUnits.find((unit) => unit.key === link.childUnitKey);
-                    if (!parentUnit || !childUnit) return null;
+                {layout.familyGroups.map((group, index) => {
+                  const parentUnit = unitLookup.get(group.parentUnitKey);
+                  const childUnits = group.childUnitKeys.map((key) => unitLookup.get(key)).filter(Boolean);
+                  if (!parentUnit || childUnits.length === 0) return null;
 
+                  const childTopY = Math.min(...childUnits.map((unit) => unit.topY));
+                  const junctionY = parentUnit.bottomY + Math.max(34, Math.min(86, (childTopY - parentUnit.bottomY) * 0.42));
+
+                  if (childUnits.length === 1) {
+                    const childUnit = childUnits[0];
                     const path = buildOrthogonalPath(parentUnit.centerX, parentUnit.bottomY, childUnit.centerX, childUnit.topY);
                     return (
                       <path
-                        key={`family:${link.parentUnitKey}:${link.childUnitKey}:${index}`}
+                        key={`family:${group.parentUnitKey}:${childUnit.key}:${index}`}
                         d={path}
                         stroke="rgba(15, 23, 42, 0.36)"
                         strokeWidth="2.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        strokeDasharray={link.dashed ? '8 8' : undefined}
+                        strokeDasharray={group.dashed ? '8 8' : undefined}
                       />
                     );
                   }
 
-                  const leftUnit = layout.positionedUnits.find((unit) => unit.key === link.leftUnitKey);
-                  const rightUnit = layout.positionedUnits.find((unit) => unit.key === link.rightUnitKey);
+                  const firstChild = childUnits[0];
+                  const lastChild = childUnits[childUnits.length - 1];
+                  return (
+                    <g key={`family-group:${group.key}:${index}`}>
+                      <path
+                        d={`M ${parentUnit.centerX} ${parentUnit.bottomY} V ${junctionY}`}
+                        stroke="rgba(15, 23, 42, 0.36)"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeDasharray={group.dashed ? '8 8' : undefined}
+                      />
+                      <path
+                        d={`M ${firstChild.centerX} ${junctionY} H ${lastChild.centerX}`}
+                        stroke="rgba(15, 23, 42, 0.36)"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeDasharray={group.dashed ? '8 8' : undefined}
+                      />
+                      {childUnits.map((childUnit) => (
+                        <path
+                          key={`family-branch:${group.key}:${childUnit.key}`}
+                          d={`M ${childUnit.centerX} ${junctionY} V ${childUnit.topY}`}
+                          stroke="rgba(15, 23, 42, 0.36)"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeDasharray={group.dashed ? '8 8' : undefined}
+                        />
+                      ))}
+                    </g>
+                  );
+                })}
+
+                {layout.peerLinks.map((link, index) => {
+                  const leftUnit = unitLookup.get(link.leftUnitKey);
+                  const rightUnit = unitLookup.get(link.rightUnitKey);
                   if (!leftUnit || !rightUnit) return null;
                   const [first, second] = leftUnit.centerX <= rightUnit.centerX ? [leftUnit, rightUnit] : [rightUnit, leftUnit];
                   const path = buildOrthogonalPath(first.centerX, first.centerY, second.centerX, second.centerY);
@@ -1013,7 +1301,7 @@ const FamilyView = ({
                   ) : null}
 
                   {unit.members.map((person, index) => {
-                    const relationMeta = getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
+                    const relationMeta = directRelationLookup.get(person.id) || getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
                     const isSelected = person.id === family.selectedPersonId;
                     const left = index * (CARD_WIDTH + PARTNER_GAP);
 
