@@ -96,6 +96,30 @@ const headerControlItems = [
   { id: 'subtitle', label: 'Header summary' },
 ];
 
+const shellPresetItems = [
+  {
+    id: 'focus',
+    label: 'Focus',
+    description: 'Lean shell with more room for content',
+    headerMode: 'auto',
+    hiddenHeaderControls: ['quickAdd', 'statusTags', 'export', 'subtitle'],
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    description: 'Keeps search and key controls visible',
+    headerMode: 'auto',
+    hiddenHeaderControls: ['statusTags'],
+  },
+  {
+    id: 'full',
+    label: 'Full',
+    description: 'Shows the full command center',
+    headerMode: 'persistent',
+    hiddenHeaderControls: [],
+  },
+];
+
 const quickAddTypes = [
   { id: 'family', label: 'Family member' },
   { id: 'medicine', label: 'Medicine', section: 'medicines' },
@@ -1096,6 +1120,36 @@ function App() {
     }
   };
 
+  const activeShellPresetId = useMemo(() => (
+    shellPresetItems.find((preset) => (
+      preset.headerMode === headerMode
+      && preset.hiddenHeaderControls.length === hiddenHeaderControls.length
+      && preset.hiddenHeaderControls.every((controlId) => hiddenHeaderControls.includes(controlId))
+    ))?.id || ''
+  ), [headerMode, hiddenHeaderControls]);
+
+  const applyShellPreset = (presetId) => {
+    const preset = shellPresetItems.find((item) => item.id === presetId);
+    if (!preset) return;
+
+    updateDashboard((current) => ({
+      ...current,
+      preferences: {
+        ...current.preferences,
+        headerMode: preset.headerMode,
+        hiddenHeaderControls: [...preset.hiddenHeaderControls],
+      },
+    }));
+
+    if (preset.hiddenHeaderControls.includes('quickAdd')) {
+      setQuickAddOpen(false);
+    }
+
+    if (preset.hiddenHeaderControls.includes('search')) {
+      setSearchQuery('');
+    }
+  };
+
   const handleUploadDocument = async (payload) => {
     setIsUploadingDocument(true);
     try {
@@ -1411,7 +1465,7 @@ function App() {
 
             {customizeOpen ? (
               <section className="life-panel border-dashed">
-                <div className="grid gap-5 xl:grid-cols-[0.78fr,1fr,1fr]">
+                <div className="grid gap-5 xl:grid-cols-2">
                   <div>
                     <p className="life-card-label">Header behavior</p>
                     <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
@@ -1432,6 +1486,29 @@ function App() {
                           >
                             {mode.label}
                             {active ? ' • active' : ` • ${mode.description}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="life-card-label">Shell presets</p>
+                    <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                      Switch the top shell between lean, balanced, and full in one click.
+                    </h2>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {shellPresetItems.map((preset) => {
+                        const active = activeShellPresetId === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => applyShellPreset(preset.id)}
+                            className={active ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+                          >
+                            {preset.label}
+                            {active ? ' • active' : ` • ${preset.description}`}
                           </button>
                         );
                       })}
@@ -1625,8 +1702,7 @@ function App() {
                         <option value="sister">Sister</option>
                         <option value="son">Son</option>
                         <option value="daughter">Daughter</option>
-                        <option value="husband">Husband</option>
-                        <option value="wife">Wife</option>
+                        <option value="spouse">Spouse</option>
                         <option value="uncle">Uncle</option>
                         <option value="aunt">Aunt</option>
                         <option value="cousin">Cousin</option>

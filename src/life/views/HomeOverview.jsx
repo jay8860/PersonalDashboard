@@ -79,6 +79,43 @@ const HomeOverview = ({
     },
   ].filter(Boolean);
 
+  const priorityShortcuts = [
+    {
+      title: 'Family tree',
+      value: `${family.people.length} people`,
+      detail: upcomingBirthdays[0]
+        ? `Next birthday: ${upcomingBirthdays[0].name}`
+        : 'Keep names and relations fresh',
+      icon: Network,
+      action: () => onNavigate('family'),
+      iconClass: 'bg-sky-500/12 text-sky-700 dark:bg-sky-500/18 dark:text-sky-200',
+    },
+    {
+      title: 'Health',
+      value: topHealthItem?.title || 'No fresh update',
+      detail: topHealthItem?.date ? formatFriendlyDate(topHealthItem.date) : 'Open your health dashboard',
+      icon: HeartPulse,
+      action: () => onNavigate('health'),
+      iconClass: 'bg-fuchsia-500/12 text-fuchsia-700 dark:bg-fuchsia-500/18 dark:text-fuchsia-200',
+    },
+    {
+      title: 'Finance',
+      value: formatCurrency(financeOverview.currentMonthSpend || 0),
+      detail: financeOverview.biggestSpend?.merchant || financeOverview.biggestSpend?.narration || 'Open your spending profile',
+      icon: BadgeIndianRupee,
+      action: () => onNavigate('finance'),
+      iconClass: 'bg-emerald-500/12 text-emerald-700 dark:bg-emerald-500/18 dark:text-emerald-200',
+    },
+    {
+      title: 'Vault',
+      value: `${documents.length} doc${documents.length === 1 ? '' : 's'}`,
+      detail: recentDocuments[0]?.title || 'Store only the documents you actually need',
+      icon: FileArchive,
+      action: () => onNavigate('vault'),
+      iconClass: 'bg-amber-500/12 text-amber-700 dark:bg-amber-500/18 dark:text-amber-200',
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <section className="life-panel relative overflow-hidden">
@@ -195,6 +232,42 @@ const HomeOverview = ({
             </div>
           </motion.button>
         ))}
+      </section>
+
+      <section className="life-panel">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="life-card-label">Priority shortcuts</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              Open the four areas you are most likely to need next
+            </h2>
+          </div>
+          <p className="max-w-xl text-sm leading-6 text-slate-500 dark:text-white/55">
+            This keeps the portal practical: fewer decisions, faster navigation, and clearer entry points into health, finance, family, and documents.
+          </p>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {priorityShortcuts.map((shortcut) => (
+            <button
+              key={shortcut.title}
+              type="button"
+              onClick={shortcut.action}
+              className="life-soft-card text-left transition hover:-translate-y-1 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="life-card-label">{shortcut.title}</p>
+                  <p className="mt-3 text-xl font-black tracking-tight text-slate-900 dark:text-white">{shortcut.value}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-white/55">{shortcut.detail}</p>
+                </div>
+                <div className={`rounded-2xl p-3 ${shortcut.iconClass}`}>
+                  <shortcut.icon size={18} />
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">

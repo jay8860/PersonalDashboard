@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GitBranchPlus, Link2, RefreshCcw, ScanSearch, Trash2, Upload, UserPlus2, ZoomIn, ZoomOut } from 'lucide-react';
+import { GitBranchPlus, Link2, RefreshCcw, ScanSearch, Search, Trash2, Upload, UserPlus2, ZoomIn, ZoomOut } from 'lucide-react';
 import {
   connectionOptions,
   getCanonicalRelationshipKey,
@@ -13,14 +13,39 @@ import {
 const CARD_WIDTH = 220;
 const CARD_HEIGHT = 132;
 const PARTNER_GAP = 22;
-const UNIT_GAP = 84;
-const SIBLING_GAP = 56;
-const CLUSTER_GAP = 144;
-const ROW_GAP = 284;
-const CANVAS_PADDING_X = 120;
-const CANVAS_PADDING_Y = 88;
-const MIN_CANVAS_WIDTH = 2280;
-const ROOT_GAP = 192;
+
+const densityPresets = {
+  compact: {
+    unitGap: 68,
+    siblingGap: 42,
+    clusterGap: 112,
+    rowGap: 248,
+    canvasPaddingX: 96,
+    canvasPaddingY: 74,
+    minCanvasWidth: 1920,
+    rootGap: 148,
+  },
+  balanced: {
+    unitGap: 84,
+    siblingGap: 56,
+    clusterGap: 144,
+    rowGap: 284,
+    canvasPaddingX: 120,
+    canvasPaddingY: 88,
+    minCanvasWidth: 2280,
+    rootGap: 192,
+  },
+  spacious: {
+    unitGap: 104,
+    siblingGap: 74,
+    clusterGap: 180,
+    rowGap: 332,
+    canvasPaddingX: 156,
+    canvasPaddingY: 104,
+    minCanvasWidth: 2720,
+    rootGap: 248,
+  },
+};
 
 const pairedRelationMatchers = {
   father: 'mother',
@@ -32,6 +57,7 @@ const pairedRelationMatchers = {
 };
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const normalizePersonName = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
 const numericBirthYear = (value) => {
   const parsed = Number.parseInt(String(value || ''), 10);
@@ -253,7 +279,16 @@ const buildOrthogonalPath = (startX, startY, endX, endY) => {
   return `M ${startX} ${startY} V ${middleY} H ${endX} V ${endY}`;
 };
 
-const buildFamilyLayout = (family) => {
+const buildFamilyLayout = (family, density = 'balanced') => {
+  const densityConfig = densityPresets[density] || densityPresets.balanced;
+  const {
+    siblingGap,
+    rowGap,
+    canvasPaddingX,
+    canvasPaddingY,
+    minCanvasWidth,
+    rootGap,
+  } = densityConfig;
   const people = [...(family.people || [])].sort(sortPeople);
   const peopleById = Object.fromEntries(people.map((person) => [person.id, person]));
   const generationById = new Map();
@@ -387,7 +422,7 @@ const buildFamilyLayout = (family) => {
 
   const generationRows = [...unitsByGeneration.keys()].sort((left, right) => left - right);
   const rowYByGeneration = new Map(
-    generationRows.map((generation, index) => [generation, CANVAS_PADDING_Y + index * ROW_GAP]),
+    generationRows.map((generation, index) => [generation, canvasPaddingY + index * rowGap]),
   );
 
   const dedupedRelationships = [];
@@ -586,7 +621,7 @@ const buildFamilyLayout = (family) => {
     if (!unit) return CARD_WIDTH;
 
     const childWidths = children.map((childKey) => measureSubtree(childKey, new Set([...trail, unitKey])));
-    const childrenWidth = childWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, childWidths.length - 1) * SIBLING_GAP;
+    const childrenWidth = childWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, childWidths.length - 1) * siblingGap;
     const width = Math.max(unit.width, childrenWidth);
     measureCache.set(unitKey, width);
     return width;
@@ -609,10 +644,10 @@ const buildFamilyLayout = (family) => {
     });
 
   const totalRootWidth = rootUnitKeys.reduce((sum, unitKey) => sum + measureSubtree(unitKey), 0)
-    + Math.max(0, rootUnitKeys.length - 1) * ROOT_GAP;
-  const canvasWidth = Math.max(MIN_CANVAS_WIDTH, totalRootWidth + CANVAS_PADDING_X * 2);
-  const canvasHeight = CANVAS_PADDING_Y * 2 + Math.max(0, generationRows.length - 1) * ROW_GAP + CARD_HEIGHT;
-  const innerWidth = canvasWidth - CANVAS_PADDING_X * 2;
+    + Math.max(0, rootUnitKeys.length - 1) * rootGap;
+  const canvasWidth = Math.max(minCanvasWidth, totalRootWidth + canvasPaddingX * 2);
+  const canvasHeight = canvasPaddingY * 2 + Math.max(0, generationRows.length - 1) * rowGap + CARD_HEIGHT;
+  const innerWidth = canvasWidth - canvasPaddingX * 2;
 
   const unitPlacement = new Map();
   const placeUnitTree = (unitKey, leftX, trail = new Set()) => {
@@ -621,7 +656,7 @@ const buildFamilyLayout = (family) => {
     const unit = unitByKey.get(unitKey);
     if (!unit) return;
     const subtreeWidth = measureSubtree(unitKey, trail);
-    const y = rowYByGeneration.get(unit.generation) || CANVAS_PADDING_Y;
+    const y = rowYByGeneration.get(unit.generation) || canvasPaddingY;
     const x = leftX + (subtreeWidth - unit.width) / 2;
 
     unitPlacement.set(unitKey, {
@@ -638,19 +673,19 @@ const buildFamilyLayout = (family) => {
     if (children.length === 0) return;
 
     const totalChildrenWidth = children.reduce((sum, childKey) => sum + measureSubtree(childKey), 0)
-      + Math.max(0, children.length - 1) * SIBLING_GAP;
+      + Math.max(0, children.length - 1) * siblingGap;
     let childCursorX = leftX + (subtreeWidth - totalChildrenWidth) / 2;
 
     children.forEach((childKey) => {
       placeUnitTree(childKey, childCursorX, new Set([...trail, unitKey]));
-      childCursorX += measureSubtree(childKey) + SIBLING_GAP;
+      childCursorX += measureSubtree(childKey) + siblingGap;
     });
   };
 
-  let rootCursorX = CANVAS_PADDING_X + Math.max(0, (innerWidth - totalRootWidth) / 2);
+  let rootCursorX = canvasPaddingX + Math.max(0, (innerWidth - totalRootWidth) / 2);
   rootUnitKeys.forEach((unitKey) => {
     placeUnitTree(unitKey, rootCursorX);
-    rootCursorX += measureSubtree(unitKey) + ROOT_GAP;
+    rootCursorX += measureSubtree(unitKey) + rootGap;
   });
 
   const positionedUnits = [...unitPlacement.values()].sort((left, right) => left.x - right.x || left.y - right.y);
@@ -720,10 +755,12 @@ const buildFamilyLayout = (family) => {
     primaryParentByChild,
     childrenByParent: new Map([...orderedChildrenByParent.entries()].map(([key, value]) => [key, [...value]])),
     groupKeyByChild,
+    rowGap,
+    canvasPaddingY,
   };
 };
 
-const buildFocusState = (family, layout) => {
+const buildFocusState = (family, layout, mode = 'lineage') => {
   const selectedPersonId = family.selectedPersonId || 'person-self';
   const selectedUnitKey = layout.personToUnitKey.get(selectedPersonId) || '';
   const selectedUnit = selectedUnitKey ? layout.unitByKey.get(selectedUnitKey) : null;
@@ -731,27 +768,37 @@ const buildFocusState = (family, layout) => {
   const descendantUnitKeys = new Set();
   const highlightedFamilyGroupKeys = new Set();
 
-  let ancestorCursor = selectedUnitKey;
-  while (ancestorCursor) {
-    const parentUnitKey = layout.primaryParentByChild.get(ancestorCursor);
-    if (!parentUnitKey || ancestorUnitKeys.has(parentUnitKey)) break;
-    ancestorUnitKeys.add(parentUnitKey);
-    const groupKey = layout.groupKeyByChild.get(ancestorCursor);
-    if (groupKey) highlightedFamilyGroupKeys.add(groupKey);
-    ancestorCursor = parentUnitKey;
-  }
+  const includeAncestors = (recursive) => {
+    let ancestorCursor = selectedUnitKey;
+    while (ancestorCursor) {
+      const parentUnitKey = layout.primaryParentByChild.get(ancestorCursor);
+      if (!parentUnitKey || ancestorUnitKeys.has(parentUnitKey)) break;
+      ancestorUnitKeys.add(parentUnitKey);
+      const groupKey = layout.groupKeyByChild.get(ancestorCursor);
+      if (groupKey) highlightedFamilyGroupKeys.add(groupKey);
+      if (!recursive) break;
+      ancestorCursor = parentUnitKey;
+    }
+  };
 
-  const walkDescendants = (unitKey) => {
+  const walkDescendants = (unitKey, recursive) => {
     const childUnitKeys = layout.childrenByParent.get(unitKey) || [];
     childUnitKeys.forEach((childUnitKey) => {
       if (descendantUnitKeys.has(childUnitKey)) return;
       descendantUnitKeys.add(childUnitKey);
       const groupKey = layout.groupKeyByChild.get(childUnitKey);
       if (groupKey) highlightedFamilyGroupKeys.add(groupKey);
-      walkDescendants(childUnitKey);
+      if (recursive) walkDescendants(childUnitKey, recursive);
     });
   };
-  walkDescendants(selectedUnitKey);
+
+  if (mode === 'direct') {
+    includeAncestors(false);
+    walkDescendants(selectedUnitKey, false);
+  } else {
+    includeAncestors(true);
+    walkDescendants(selectedUnitKey, true);
+  }
 
   const cardRoles = new Map([[selectedPersonId, 'selected']]);
   const ancestorIds = new Set();
@@ -785,6 +832,11 @@ const buildFocusState = (family, layout) => {
   });
 
   const focusedUnitKeys = new Set([selectedUnitKey, ...ancestorUnitKeys, ...descendantUnitKeys]);
+  const focusedPersonIds = new Set();
+  focusedUnitKeys.forEach((unitKey) => {
+    const unit = layout.unitByKey.get(unitKey);
+    unit?.members.forEach((member) => focusedPersonIds.add(member.id));
+  });
   const highlightedCoupleUnitKeys = new Set(
     [...focusedUnitKeys].filter((unitKey) => layout.unitByKey.get(unitKey)?.members.length === 2),
   );
@@ -802,6 +854,8 @@ const buildFocusState = (family, layout) => {
     ancestorCount: ancestorIds.size,
     spouseCount: spouseIds.size,
     descendantCount: descendantIds.size,
+    focusedUnitKeys,
+    focusedPersonIds,
     hasBranchFocus: cardRoles.size > 1,
   };
 };
@@ -824,12 +878,18 @@ const FamilyView = ({
   const [backupFeedback, setBackupFeedback] = useState('');
   const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [zoom, setZoom] = useState(0.64);
+  const [familySearchQuery, setFamilySearchQuery] = useState('');
+  const [focusMode, setFocusMode] = useState('lineage');
+  const [isolateBranch, setIsolateBranch] = useState(false);
+  const [layoutDensity, setLayoutDensity] = useState('balanced');
+  const [showGenerationLabels, setShowGenerationLabels] = useState(true);
   const canvasViewportRef = useRef(null);
   const backupInputRef = useRef(null);
+  const quickAddSectionRef = useRef(null);
 
-  const layout = useMemo(() => buildFamilyLayout(family), [family]);
+  const layout = useMemo(() => buildFamilyLayout(family, layoutDensity), [family, layoutDensity]);
   const directRelationLookup = useMemo(() => buildDirectRelationLookup(family), [family]);
-  const focusState = useMemo(() => buildFocusState(family, layout), [family, layout]);
+  const focusState = useMemo(() => buildFocusState(family, layout, focusMode), [family, layout, focusMode]);
 
   useEffect(() => {
     setPersonDraft((current) => ({
@@ -843,6 +903,59 @@ const FamilyView = ({
     }));
   }, [family.people, family.selectedPersonId]);
 
+  const duplicateNameGroups = useMemo(() => {
+    const groups = new Map();
+    family.people.forEach((person) => {
+      const token = normalizePersonName(person.name);
+      if (!token) return;
+      const next = groups.get(token) || [];
+      next.push(person);
+      groups.set(token, next);
+    });
+
+    return [...groups.entries()]
+      .filter(([, peopleInGroup]) => peopleInGroup.length > 1)
+      .map(([token, peopleInGroup]) => ({
+        key: token,
+        label: peopleInGroup[0]?.name || 'Unnamed person',
+        people: [...peopleInGroup].sort(sortPeople),
+      }))
+      .sort((left, right) => right.people.length - left.people.length || left.label.localeCompare(right.label));
+  }, [family.people]);
+
+  const familySearchResults = useMemo(() => {
+    const token = normalizePersonName(familySearchQuery);
+    if (!token) return [];
+    return family.people
+      .filter((person) => normalizePersonName(person.name).includes(token))
+      .sort(sortPeople)
+      .slice(0, 8);
+  }, [family.people, familySearchQuery]);
+
+  const centerViewportOnPerson = (personId, nextZoom = zoom, behavior = 'smooth') => {
+    const viewport = canvasViewportRef.current;
+    const bounds = viewport?.getBoundingClientRect();
+    if (bounds == null || viewport == null) return;
+
+    const focusLayout = layout.personLayout.get(personId)
+      || layout.personLayout.get('person-self')
+      || layout.personLayout.values().next().value;
+
+    if (!focusLayout) {
+      viewport.scrollTo({ top: 0, left: 0, behavior });
+      return;
+    }
+
+    const scaledCenterX = focusLayout.centerX * nextZoom;
+    const scaledCenterY = focusLayout.centerY * nextZoom;
+    const maxLeft = Math.max(0, layout.canvasWidth * nextZoom - bounds.width);
+    const maxTop = Math.max(0, layout.canvasHeight * nextZoom - bounds.height);
+    const left = clamp(scaledCenterX - bounds.width / 2, 0, maxLeft);
+    const top = clamp(Math.max(0, scaledCenterY - bounds.height * 0.32), 0, maxTop);
+
+    viewport.scrollTo({ top, left, behavior });
+  };
+
   const fitCanvas = () => {
     const viewport = canvasViewportRef.current;
     const bounds = viewport?.getBoundingClientRect();
@@ -854,25 +967,7 @@ const FamilyView = ({
     );
     const nextZoom = Number(fitted.toFixed(2));
     setZoom(nextZoom);
-
-    const focusPersonId = family.selectedPersonId || 'person-self';
-    const focusLayout = layout.personLayout.get(focusPersonId)
-      || layout.personLayout.get('person-self')
-      || layout.personLayout.values().next().value;
-
-    if (!focusLayout) {
-      viewport.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-      return;
-    }
-
-    const scaledCenterX = focusLayout.centerX * nextZoom;
-    const scaledCenterY = focusLayout.centerY * nextZoom;
-    const maxLeft = Math.max(0, layout.canvasWidth * nextZoom - bounds.width);
-    const maxTop = Math.max(0, layout.canvasHeight * nextZoom - bounds.height);
-    const left = clamp(scaledCenterX - bounds.width / 2, 0, maxLeft);
-    const top = clamp(Math.max(0, scaledCenterY - bounds.height * 0.32), 0, maxTop);
-
-    viewport.scrollTo({ top, left, behavior: 'smooth' });
+    centerViewportOnPerson(family.selectedPersonId || 'person-self', nextZoom);
   };
 
   useEffect(() => {
@@ -884,11 +979,87 @@ const FamilyView = ({
     };
   }, [layout.canvasHeight, layout.canvasWidth]);
 
+  useEffect(() => {
+    if (!family.selectedPersonId) return undefined;
+    const id = window.requestAnimationFrame(() => centerViewportOnPerson(family.selectedPersonId));
+    return () => window.cancelAnimationFrame(id);
+  }, [family.selectedPersonId, zoom, layout.canvasHeight, layout.canvasWidth]);
+
   const selectedPerson = family.people.find((person) => person.id === family.selectedPersonId) || family.people[0];
   const selectedAnchor = selectedPerson?.anchorId ? layout.peopleById[selectedPerson.anchorId] : null;
   const selectedRelationMeta = selectedPerson
     ? directRelationLookup.get(selectedPerson.id) || getRelationMeta(selectedPerson.relationKey, selectedPerson.relationLabel, selectedPerson.relationHindi)
     : null;
+  const selectedUnitKey = selectedPerson ? layout.personToUnitKey.get(selectedPerson.id) || '' : '';
+  const selectedUnit = selectedUnitKey ? layout.unitByKey.get(selectedUnitKey) : null;
+  const selectedParentUnit = selectedUnitKey ? layout.unitByKey.get(layout.primaryParentByChild.get(selectedUnitKey) || '') : null;
+  const selectedChildUnits = selectedUnitKey
+    ? (layout.childrenByParent.get(selectedUnitKey) || []).map((key) => layout.unitByKey.get(key)).filter(Boolean)
+    : [];
+  const selectedSpousePeople = selectedUnit?.members.filter((person) => person.id !== selectedPerson?.id) || [];
+  const selectedParentPeople = selectedParentUnit?.members || [];
+  const selectedChildPeople = selectedChildUnits.flatMap((unit) => unit.members);
+  const selectedPathToSelf = useMemo(() => {
+    if (!selectedPerson) return '';
+    if (selectedPerson.id === 'person-self') return 'You';
+
+    const pathNames = [];
+    const visited = new Set();
+    let cursor = selectedPerson;
+    while (cursor && !visited.has(cursor.id)) {
+      visited.add(cursor.id);
+      pathNames.unshift(cursor.name || 'Unnamed person');
+      if (cursor.id === 'person-self') break;
+      cursor = cursor.anchorId ? layout.peopleById[cursor.anchorId] : null;
+    }
+
+    return pathNames[0] === 'You' ? pathNames.join(' → ') : ['You', ...pathNames].join(' → ');
+  }, [layout.peopleById, selectedPerson]);
+
+  const primeQuickAdd = (relationKey) => {
+    if (!selectedPerson) return;
+    setPersonDraft((current) => ({
+      ...current,
+      anchorId: selectedPerson.id,
+      relationKey,
+      relationLabel: relationKey === 'custom' ? current.relationLabel : '',
+      relationHindi: relationKey === 'custom' ? current.relationHindi : '',
+      name: '',
+      birthYear: '',
+      note: '',
+    }));
+    quickAddSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleSelectPerson = (personId) => {
+    onSelectPerson(personId);
+    window.requestAnimationFrame(() => centerViewportOnPerson(personId));
+  };
+
+  const visibleUnitKeys = useMemo(() => {
+    if (!(isolateBranch && focusState.hasBranchFocus)) {
+      return new Set(layout.positionedUnits.map((unit) => unit.key));
+    }
+    return new Set(focusState.focusedUnitKeys);
+  }, [focusState.focusedUnitKeys, focusState.hasBranchFocus, isolateBranch, layout.positionedUnits]);
+
+  const visibleUnits = useMemo(
+    () => layout.positionedUnits.filter((unit) => visibleUnitKeys.has(unit.key)),
+    [layout.positionedUnits, visibleUnitKeys],
+  );
+  const visibleFamilyGroups = useMemo(
+    () => layout.familyGroups.filter((group) => visibleUnitKeys.has(group.parentUnitKey) && group.childUnitKeys.some((key) => visibleUnitKeys.has(key))),
+    [layout.familyGroups, visibleUnitKeys],
+  );
+  const visiblePeerLinks = useMemo(
+    () => layout.peerLinks.filter((link) => visibleUnitKeys.has(link.leftUnitKey) && visibleUnitKeys.has(link.rightUnitKey)),
+    [layout.peerLinks, visibleUnitKeys],
+  );
+  const visibleGenerationRows = useMemo(() => {
+    if (!(isolateBranch && focusState.hasBranchFocus)) return layout.generationRows;
+    const visibleGenerations = new Set(visibleUnits.map((unit) => unit.generation));
+    return layout.generationRows.filter((generation) => visibleGenerations.has(generation));
+  }, [focusState.hasBranchFocus, isolateBranch, layout.generationRows, visibleUnits]);
 
   const handlePersonSubmit = (event) => {
     event.preventDefault();
@@ -931,7 +1102,7 @@ const FamilyView = ({
   return (
     <div className="grid gap-6 xl:grid-cols-[390px,minmax(0,1fr)]">
       <div className="space-y-6">
-        <section className="life-panel">
+        <section ref={quickAddSectionRef} className="life-panel">
           <div className="flex items-start gap-3">
             <div className="rounded-2xl bg-sky-500/12 p-3 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">
               <UserPlus2 size={18} />
@@ -1079,6 +1250,49 @@ const FamilyView = ({
             ) : null}
           </form>
         </section>
+
+        {duplicateNameGroups.length > 0 ? (
+          <section className="life-panel">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-rose-500/12 p-3 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200">
+                <ScanSearch size={18} />
+              </div>
+              <div>
+                <p className="life-card-label">Potential duplicates</p>
+                <h3 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                  These names appear more than once. Review them before the tree gets noisy.
+                </h3>
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {duplicateNameGroups.map((group) => (
+                <div key={group.key} className="rounded-[1.2rem] border border-white/80 bg-white/70 p-4 backdrop-blur dark:border-white/10 dark:bg-white/8">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {group.label} appears {group.people.length} times
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {group.people.map((person) => {
+                      const relationMeta = directRelationLookup.get(person.id) || getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
+                      return (
+                        <button
+                          key={person.id}
+                          type="button"
+                          onClick={() => handleSelectPerson(person.id)}
+                          className="life-tab whitespace-nowrap"
+                        >
+                          {person.name || 'Unnamed person'}
+                          {' • '}
+                          {relationMeta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="life-panel">
           <div className="flex items-start gap-3">
@@ -1272,6 +1486,64 @@ const FamilyView = ({
                 </p>
               </div>
 
+              <div className="flex flex-wrap gap-2">
+                <span className="tag">{selectedPathToSelf}</span>
+                {selectedSpousePeople.length ? <span className="tag">{selectedSpousePeople.length} spouse</span> : null}
+                {selectedParentPeople.length ? <span className="tag">{selectedParentPeople.length} parent link</span> : null}
+                {selectedChildPeople.length ? <span className="tag">{selectedChildPeople.length} child{selectedChildPeople.length === 1 ? '' : 'ren'}</span> : null}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-[1.2rem] border border-white/80 bg-white/70 px-4 py-3 text-sm text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/8 dark:text-white/70">
+                  <p className="life-card-label">Parents</p>
+                  <p className="mt-2 font-semibold text-slate-900 dark:text-white">
+                    {selectedParentPeople.length ? selectedParentPeople.map((person) => person.name || 'Unnamed person').join(', ') : 'No parent link yet'}
+                  </p>
+                </div>
+                <div className="rounded-[1.2rem] border border-white/80 bg-white/70 px-4 py-3 text-sm text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/8 dark:text-white/70">
+                  <p className="life-card-label">Spouse</p>
+                  <p className="mt-2 font-semibold text-slate-900 dark:text-white">
+                    {selectedSpousePeople.length ? selectedSpousePeople.map((person) => person.name || 'Unnamed person').join(', ') : 'No spouse linked'}
+                  </p>
+                </div>
+                <div className="rounded-[1.2rem] border border-white/80 bg-white/70 px-4 py-3 text-sm text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/8 dark:text-white/70">
+                  <p className="life-card-label">Children</p>
+                  <p className="mt-2 font-semibold text-slate-900 dark:text-white">
+                    {selectedChildPeople.length ? selectedChildPeople.map((person) => person.name || 'Unnamed person').join(', ') : 'No children linked'}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="life-card-label">Quick actions</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => centerViewportOnPerson(selectedPerson.id)} className="life-secondary-button px-4 py-2">
+                    Center on chart
+                  </button>
+                  <button type="button" onClick={() => primeQuickAdd('father')} className="life-tab whitespace-nowrap">
+                    Add father
+                  </button>
+                  <button type="button" onClick={() => primeQuickAdd('mother')} className="life-tab whitespace-nowrap">
+                    Add mother
+                  </button>
+                  <button type="button" onClick={() => primeQuickAdd('spouse')} className="life-tab whitespace-nowrap">
+                    Add spouse
+                  </button>
+                  <button type="button" onClick={() => primeQuickAdd('brother')} className="life-tab whitespace-nowrap">
+                    Add brother
+                  </button>
+                  <button type="button" onClick={() => primeQuickAdd('sister')} className="life-tab whitespace-nowrap">
+                    Add sister
+                  </button>
+                  <button type="button" onClick={() => primeQuickAdd('son')} className="life-tab whitespace-nowrap">
+                    Add son
+                  </button>
+                  <button type="button" onClick={() => primeQuickAdd('daughter')} className="life-tab whitespace-nowrap">
+                    Add daughter
+                  </button>
+                </div>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-2">
                   <span className="life-card-label">Birth year</span>
@@ -1387,10 +1659,10 @@ const FamilyView = ({
           <div>
             <p className="life-card-label">Family map</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Generational layout, straight lines, and smoother couple-and-child grouping.
+              Generational layout with search, branch focus, and more breathing room between families.
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-white/55">
-              Click any card to spotlight that person&apos;s spouse, parents, and children so the branch becomes much easier to read.
+              Click a card to follow that person&apos;s lineage. You can search for anyone, isolate the branch, and switch between direct-family focus or the full lineage.
             </p>
           </div>
 
@@ -1411,16 +1683,99 @@ const FamilyView = ({
           </div>
         </div>
 
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.05fr),auto] xl:items-start">
+          <div className="space-y-4">
+            <label className="relative block">
+              <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/35" />
+              <input
+                value={familySearchQuery}
+                onChange={(event) => setFamilySearchQuery(event.target.value)}
+                placeholder="Find a family member and jump to them"
+                className="life-input pl-11"
+              />
+            </label>
+            {familySearchQuery.trim() ? (
+              <div className="flex flex-wrap gap-2">
+                {familySearchResults.length === 0 ? (
+                  <span className="tag">No match</span>
+                ) : (
+                  familySearchResults.map((person) => {
+                    const relationMeta = directRelationLookup.get(person.id) || getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
+                    return (
+                      <button
+                        key={person.id}
+                        type="button"
+                        onClick={() => handleSelectPerson(person.id)}
+                        className="life-tab whitespace-nowrap"
+                      >
+                        {person.name || 'Unnamed person'}
+                        {' • '}
+                        {relationMeta.label}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap gap-2 xl:max-w-[28rem] xl:justify-end">
+            {[
+              { id: 'lineage', label: 'Full lineage' },
+              { id: 'direct', label: 'Direct family' },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setFocusMode(mode.id)}
+                className={focusMode === mode.id ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+              >
+                {mode.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setIsolateBranch((current) => !current)}
+              className={isolateBranch ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+            >
+              {isolateBranch ? 'Branch only' : 'Show full tree'}
+            </button>
+            {[
+              { id: 'compact', label: 'Compact' },
+              { id: 'balanced', label: 'Balanced' },
+              { id: 'spacious', label: 'Spacious' },
+            ].map((density) => (
+              <button
+                key={density.id}
+                type="button"
+                onClick={() => setLayoutDensity(density.id)}
+                className={layoutDensity === density.id ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+              >
+                {density.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowGenerationLabels((current) => !current)}
+              className={showGenerationLabels ? 'life-tab whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+            >
+              {showGenerationLabels ? 'Hide row labels' : 'Show row labels'}
+            </button>
+          </div>
+        </div>
+
         <div className="mt-4 flex flex-wrap gap-2">
           {focusState.hasBranchFocus ? (
             <>
               <span className="tag">{selectedPerson?.name || 'Selected person'} in focus</span>
+              <span className="tag">{focusMode === 'lineage' ? 'Full lineage focus' : 'Direct family focus'}</span>
+              {isolateBranch ? <span className="tag">Only this branch visible</span> : null}
               {focusState.spouseCount ? <span className="tag">{focusState.spouseCount} spouse link{focusState.spouseCount === 1 ? '' : 's'}</span> : null}
               {focusState.ancestorCount ? <span className="tag">{focusState.ancestorCount} ancestor card{focusState.ancestorCount === 1 ? '' : 's'}</span> : null}
               {focusState.descendantCount ? <span className="tag">{focusState.descendantCount} descendant card{focusState.descendantCount === 1 ? '' : 's'}</span> : null}
             </>
           ) : null}
-          {layout.generationRows.map((generation) => (
+          {visibleGenerationRows.map((generation) => (
             <span key={generation} className="tag">
               {getRowLabel(generation)}
             </span>
@@ -1438,17 +1793,17 @@ const FamilyView = ({
                 transformOrigin: 'top left',
               }}
             >
-              {layout.generationRows.map((generation) => {
-                const top = (layout.generationRows.indexOf(generation) * ROW_GAP) + CANVAS_PADDING_Y - 34;
+              {showGenerationLabels ? visibleGenerationRows.map((generation) => {
+                const top = (layout.generationRows.indexOf(generation) * layout.rowGap) + layout.canvasPaddingY - 34;
                 return (
                   <div key={generation} className="absolute left-6" style={{ top }}>
                     <span className="tag">{getRowLabel(generation)}</span>
                   </div>
                 );
-              })}
+              }) : null}
 
               <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${layout.canvasWidth} ${layout.canvasHeight}`} fill="none">
-                {layout.positionedUnits.filter((unit) => unit.members.length === 2).map((unit) => {
+                {visibleUnits.filter((unit) => unit.members.length === 2).map((unit) => {
                   const leftCard = layout.personLayout.get(unit.members[0].id);
                   const rightCard = layout.personLayout.get(unit.members[1].id);
                   if (!leftCard || !rightCard) return null;
@@ -1473,9 +1828,12 @@ const FamilyView = ({
                   );
                 })}
 
-                {layout.familyGroups.map((group, index) => {
+                {visibleFamilyGroups.map((group, index) => {
                   const parentUnit = layout.unitByKey.get(group.parentUnitKey);
-                  const childUnits = group.childUnitKeys.map((key) => layout.unitByKey.get(key)).filter(Boolean);
+                  const childUnits = group.childUnitKeys
+                    .filter((key) => visibleUnitKeys.has(key))
+                    .map((key) => layout.unitByKey.get(key))
+                    .filter(Boolean);
                   if (!parentUnit || childUnits.length === 0) return null;
                   const isHighlighted = focusState.highlightedFamilyGroupKeys.has(group.key);
                   const stroke = isHighlighted
@@ -1539,7 +1897,7 @@ const FamilyView = ({
                   );
                 })}
 
-                {layout.peerLinks.map((link, index) => {
+                {visiblePeerLinks.map((link, index) => {
                   const leftUnit = layout.unitByKey.get(link.leftUnitKey);
                   const rightUnit = layout.unitByKey.get(link.rightUnitKey);
                   if (!leftUnit || !rightUnit) return null;
@@ -1564,7 +1922,7 @@ const FamilyView = ({
                 })}
               </svg>
 
-              {layout.positionedUnits.map((unit) => (
+              {visibleUnits.map((unit) => (
                 <div
                   key={unit.key}
                   className="absolute"
@@ -1623,11 +1981,11 @@ const FamilyView = ({
                         key={person.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => onSelectPerson(person.id)}
+                        onClick={() => handleSelectPerson(person.id)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
-                            onSelectPerson(person.id);
+                            handleSelectPerson(person.id);
                           }
                         }}
                         className={cardClass}
