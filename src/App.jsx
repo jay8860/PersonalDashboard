@@ -1087,6 +1087,19 @@ function App() {
     });
   };
 
+  const updateFamilyTreeViewPreferences = (patch) => {
+    updateDashboard((current) => ({
+      ...current,
+      preferences: {
+        ...current.preferences,
+        familyTreeView: {
+          ...(current.preferences.familyTreeView || {}),
+          ...patch,
+        },
+      },
+    }));
+  };
+
   const setHeaderModePreference = (nextMode) => {
     updateDashboard((current) => ({
       ...current,
@@ -1282,6 +1295,8 @@ function App() {
         return (
           <FamilyView
             family={dashboard.family}
+            viewPreferences={dashboard.preferences.familyTreeView}
+            onChangeViewPreferences={updateFamilyTreeViewPreferences}
             onAddPerson={addPerson}
             onBulkAdd={addPeopleInBulk}
             onUpdatePerson={updatePerson}

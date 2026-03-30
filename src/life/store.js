@@ -2,6 +2,12 @@ const STORAGE_KEY = 'life-atlas-dashboard-v4';
 
 const defaultHiddenPlannerSections = ['reminders'];
 const defaultHeaderMode = 'auto';
+const defaultFamilyTreeView = {
+  focusMode: 'lineage',
+  isolateBranch: false,
+  layoutDensity: 'balanced',
+  showGenerationLabels: true,
+};
 
 const defaultProfile = {
   fullName: '',
@@ -116,6 +122,7 @@ export const createEmptyStore = () => ({
     hiddenPlannerSections: [...defaultHiddenPlannerSections],
     headerMode: defaultHeaderMode,
     hiddenHeaderControls: [],
+    familyTreeView: { ...defaultFamilyTreeView },
   },
   updatedAt: null,
 });
@@ -238,6 +245,14 @@ const normalizePreferences = (preferences = {}) => ({
   hiddenHeaderControls: Array.isArray(preferences?.hiddenHeaderControls)
     ? [...new Set(preferences.hiddenHeaderControls.filter((value) => typeof value === 'string'))]
     : [],
+  familyTreeView: {
+    focusMode: preferences?.familyTreeView?.focusMode === 'direct' ? 'direct' : defaultFamilyTreeView.focusMode,
+    isolateBranch: Boolean(preferences?.familyTreeView?.isolateBranch),
+    layoutDensity: ['compact', 'balanced', 'spacious'].includes(preferences?.familyTreeView?.layoutDensity)
+      ? preferences.familyTreeView.layoutDensity
+      : defaultFamilyTreeView.layoutDensity,
+    showGenerationLabels: preferences?.familyTreeView?.showGenerationLabels !== false,
+  },
 });
 
 export const normalizeDashboard = (raw = {}) => {
