@@ -1229,8 +1229,17 @@ const FamilyView = ({
     };
 
     chartRootUnitKeys.forEach(walk);
+    if (collected.size === 0) {
+      const fallbackUnitKey = layout.personToUnitKey.get(activeChartRootPersonId) || layout.personToUnitKey.get('person-self') || '';
+      walk(fallbackUnitKey);
+    }
+
+    if (collected.size === 0) {
+      return new Set(layout.positionedUnits.map((unit) => unit.key));
+    }
+
     return collected;
-  }, [chartRootUnitKeys, layout.childrenByParent, layout.positionedUnits]);
+  }, [activeChartRootPersonId, chartRootUnitKeys, layout.childrenByParent, layout.personToUnitKey, layout.positionedUnits]);
 
   const visibleUnitKeys = useMemo(() => {
     if (!(isolateBranch && focusState.hasBranchFocus)) {
@@ -1243,6 +1252,32 @@ const FamilyView = ({
     () => layout.positionedUnits.filter((unit) => visibleUnitKeys.has(unit.key)),
     [layout.positionedUnits, visibleUnitKeys],
   );
+  const visibleCanvasBounds = useMemo(() => {
+    if (visibleUnits.length === 0) return null;
+
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    visibleUnits.forEach((unit) => {
+      minX = Math.min(minX, unit.x);
+      minY = Math.min(minY, unit.y);
+      maxX = Math.max(maxX, unit.x + unit.width);
+      maxY = Math.max(maxY, unit.y + CARD_HEIGHT);
+    });
+
+    const paddingX = 96;
+    const paddingY = 84;
+    return {
+      minX: Math.max(0, minX - paddingX),
+      minY: Math.max(0, minY - paddingY),
+      maxX: maxX + paddingX,
+      maxY: maxY + paddingY,
+      width: Math.max(CARD_WIDTH, maxX - minX + paddingX * 2),
+      height: Math.max(CARD_HEIGHT, maxY - minY + paddingY * 2),
+    };
+  }, [visibleUnits]);
   const visibleFamilyGroups = useMemo(
     () => layout.familyGroups.filter((group) => visibleUnitKeys.has(group.parentUnitKey) && group.childUnitKeys.some((key) => visibleUnitKeys.has(key))),
     [layout.familyGroups, visibleUnitKeys],
@@ -1256,6 +1291,37 @@ const FamilyView = ({
     const visibleGenerations = new Set(visibleUnits.map((unit) => unit.generation));
     return layout.generationRows.filter((generation) => visibleGenerations.has(generation));
   }, [focusState.hasBranchFocus, isolateBranch, layout.generationRows, visibleUnits]);
+
+  const fitVisibleCanvas = (behavior = 'smooth') => {
+    const viewport = canvasViewportRef.current;
+    const bounds = viewport?.getBoundingClientRect();
+    if (bounds == null || viewport == null || visibleCanvasBounds == null) return;
+
+    const nextZoom = Number(
+      clamp(
+        Math.min((bounds.width - 24) / visibleCanvasBounds.width, (bounds.height - 24) / visibleCanvasBounds.height, 1),
+        0.34,
+        0.92,
+      ).toFixed(2),
+    );
+
+    setZoom(nextZoom);
+
+    const centerX = ((visibleCanvasBounds.minX + visibleCanvasBounds.maxX) / 2) * nextZoom;
+    const centerY = ((visibleCanvasBounds.minY + visibleCanvasBounds.maxY) / 2) * nextZoom;
+    const maxLeft = Math.max(0, layout.canvasWidth * nextZoom - bounds.width);
+    const maxTop = Math.max(0, layout.canvasHeight * nextZoom - bounds.height);
+    const left = clamp(centerX - bounds.width / 2, 0, maxLeft);
+    const top = clamp(centerY - bounds.height * 0.42, 0, maxTop);
+
+    viewport.scrollTo({ top, left, behavior });
+  };
+
+  useEffect(() => {
+    if (visibleUnits.length === 0) return undefined;
+    const id = window.requestAnimationFrame(() => fitVisibleCanvas('smooth'));
+    return () => window.cancelAnimationFrame(id);
+  }, [activeChart.id, isolateBranch, layoutDensity, visibleUnits.length]);
 
   const handlePersonSubmit = (event) => {
     event.preventDefault();
