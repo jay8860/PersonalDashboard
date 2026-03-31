@@ -51,6 +51,7 @@ import {
   createPerson,
   createQuickNote,
   createReminder,
+  createSavedFamilyChart,
   downloadJsonFile,
   hasMeaningfulDashboardData,
   loadDashboard,
@@ -255,6 +256,18 @@ const findBranchRootsForRelationship = (family, canonicalKey) => {
       return getCanonicalRelationshipKey(autoRelationship) === canonicalKey;
     })
     .map((person) => person.id);
+};
+
+const pruneFamilyCharts = (family, removedIds = new Set()) => {
+  const nextCharts = (family.charts || []).filter((chart) => chart.id === 'chart-main' || !removedIds.has(chart.rootPersonId));
+  const activeChartId = nextCharts.some((chart) => chart.id === family.activeChartId)
+    ? family.activeChartId
+    : 'chart-main';
+
+  return {
+    charts: nextCharts,
+    activeChartId,
+  };
 };
 
 const fetchPortalBootstrap = async () => {
@@ -814,15 +827,19 @@ function App() {
 
     if (!window.confirm(message)) return;
 
-    updateDashboard((current) => ({
-      ...current,
-      family: {
-        ...current.family,
-        selectedPersonId: branchIds.has(current.family.selectedPersonId) ? 'person-self' : current.family.selectedPersonId,
-        people: current.family.people.filter((person) => !branchIds.has(person.id)),
-        relationships: current.family.relationships.filter((relationship) => !branchIds.has(relationship.sourceId) && !branchIds.has(relationship.targetId)),
-      },
-    }));
+    updateDashboard((current) => {
+      const chartState = pruneFamilyCharts(current.family, branchIds);
+      return {
+        ...current,
+        family: {
+          ...current.family,
+          ...chartState,
+          selectedPersonId: branchIds.has(current.family.selectedPersonId) ? 'person-self' : current.family.selectedPersonId,
+          people: current.family.people.filter((person) => !branchIds.has(person.id)),
+          relationships: current.family.relationships.filter((relationship) => !branchIds.has(relationship.sourceId) && !branchIds.has(relationship.targetId)),
+        },
+      };
+    });
   };
 
   const addRelationship = (draft) => {
@@ -864,11 +881,13 @@ function App() {
       const currentKey = getCanonicalRelationshipKey(currentTarget);
       const currentBranchRootIds = findBranchRootsForRelationship(current.family, currentKey);
       const currentBranchIds = collectFamilyBranchIds(current.family, currentBranchRootIds);
+      const chartState = pruneFamilyCharts(current.family, currentBranchIds);
 
       return {
         ...current,
         family: {
           ...current.family,
+          ...chartState,
           selectedPersonId: currentBranchIds.has(current.family.selectedPersonId) ? 'person-self' : current.family.selectedPersonId,
           people: current.family.people.filter((person) => !currentBranchIds.has(person.id)),
           relationships: current.family.relationships.filter((relationship) => {
@@ -880,6 +899,72 @@ function App() {
         },
       };
     });
+  };
+
+  const selectFamilyChart = (chartId) => {
+    updateDashboard((current) => {
+      const chart = (current.family.charts || []).find((item) => item.id === chartId);
+      if (!chart) return current;
+      return {
+        ...current,
+        family: {
+          ...current.family,
+          activeChartId: chart.id,
+          selectedPersonId: chart.rootPersonId,
+        },
+      };
+    });
+  };
+
+  const createFamilyChart = ({ name, rootPersonId }) => {
+    updateDashboard((current) => {
+      const rootPerson = current.family.people.find((person) => person.id === rootPersonId);
+      if (!rootPerson) return current;
+      const nextChart = createSavedFamilyChart({
+        name: name?.trim() || `${rootPerson.name || 'Family'} chart`,
+        rootPersonId,
+      });
+      return {
+        ...current,
+        family: {
+          ...current.family,
+          charts: [...(current.family.charts || []), nextChart],
+          activeChartId: nextChart.id,
+          selectedPersonId: rootPersonId,
+        },
+      };
+    });
+  };
+
+  const renameFamilyChart = (chartId, name) => {
+    updateDashboard((current) => ({
+      ...current,
+      family: {
+        ...current.family,
+        charts: (current.family.charts || []).map((chart) => (
+          chart.id === chartId
+            ? { ...chart, name: name?.trim() || chart.name }
+            : chart
+        )),
+      },
+    }));
+  };
+
+  const deleteFamilyChart = (chartId) => {
+    if (chartId === 'chart-main') return;
+    const targetChart = dashboard.family.charts.find((chart) => chart.id === chartId);
+    if (!targetChart) return;
+    if (!window.confirm(`Delete the chart "${targetChart.name}"? The people stay in your database, only this saved chart view will be removed.`)) return;
+
+    updateDashboard((current) => ({
+      ...current,
+      family: {
+        ...current.family,
+        charts: (current.family.charts || []).filter((chart) => chart.id !== chartId),
+        activeChartId: current.family.activeChartId === chartId ? 'chart-main' : current.family.activeChartId,
+        selectedPersonId: current.family.activeChartId === chartId ? 'person-self' : current.family.selectedPersonId,
+      },
+    }));
   };
 
   const addFitnessEntry = (draft) => {
@@ -1297,6 +1382,10 @@ function App() {
             family={dashboard.family}
             viewPreferences={dashboard.preferences.familyTreeView}
             onChangeViewPreferences={updateFamilyTreeViewPreferences}
+            onSelectChart={selectFamilyChart}
+            onCreateChart={createFamilyChart}
+            onRenameChart={renameFamilyChart}
+            onDeleteChart={deleteFamilyChart}
             onAddPerson={addPerson}
             onBulkAdd={addPeopleInBulk}
             onUpdatePerson={updatePerson}

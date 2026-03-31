@@ -7,6 +7,7 @@ const defaultFamilyTreeView = {
   isolateBranch: false,
   layoutDensity: 'balanced',
   showGenerationLabels: true,
+  viewRootPersonId: 'person-self',
 };
 
 const defaultProfile = {
@@ -55,6 +56,14 @@ const createEmptyPerson = (overrides = {}) => ({
   ...overrides,
 });
 
+const createFamilyChart = (overrides = {}) => ({
+  id: crypto.randomUUID(),
+  name: 'Family chart',
+  rootPersonId: 'person-self',
+  createdAt: new Date().toISOString(),
+  ...overrides,
+});
+
 const createEmptyReminder = (overrides = {}) => ({
   id: crypto.randomUUID(),
   title: '',
@@ -95,6 +104,14 @@ export const createEmptyStore = () => ({
   profile: { ...defaultProfile },
   family: {
     selectedPersonId: 'person-self',
+    activeChartId: 'chart-main',
+    charts: [
+      createFamilyChart({
+        id: 'chart-main',
+        name: 'Main family chart',
+        rootPersonId: 'person-self',
+      }),
+    ],
     people: [
       createEmptyPerson({
         id: 'person-self',
@@ -128,6 +145,7 @@ export const createEmptyStore = () => ({
 });
 
 export const createPerson = (overrides = {}) => createEmptyPerson(overrides);
+export const createSavedFamilyChart = (overrides = {}) => createFamilyChart(overrides);
 export const createReminder = (overrides = {}) => createEmptyReminder(overrides);
 export const createMedicine = (overrides = {}) => createEmptyMedicine(overrides);
 export const createQuickNote = (overrides = {}) => createEmptyQuickNote(overrides);
@@ -173,6 +191,28 @@ const normalizeRelationships = (relationships = [], people = []) => {
       label: relationship?.label || '',
       labelHindi: relationship?.labelHindi || '',
     }));
+};
+
+const normalizeFamilyCharts = (charts = [], people = []) => {
+  const personIds = new Set(people.map((person) => person.id));
+  const normalizedCharts = [...charts]
+    .filter(Boolean)
+    .map((chart) => createFamilyChart({
+      ...chart,
+      rootPersonId: personIds.has(chart?.rootPersonId) ? chart.rootPersonId : 'person-self',
+      name: chart?.name?.trim() || 'Family chart',
+      createdAt: chart?.createdAt || new Date().toISOString(),
+    }));
+
+  if (!normalizedCharts.some((chart) => chart.id === 'chart-main')) {
+    normalizedCharts.unshift(createFamilyChart({
+      id: 'chart-main',
+      name: 'Main family chart',
+      rootPersonId: 'person-self',
+    }));
+  }
+
+  return normalizedCharts;
 };
 
 const normalizeGoals = (goals = {}) => ({
@@ -252,17 +292,25 @@ const normalizePreferences = (preferences = {}) => ({
       ? preferences.familyTreeView.layoutDensity
       : defaultFamilyTreeView.layoutDensity,
     showGenerationLabels: preferences?.familyTreeView?.showGenerationLabels !== false,
+    viewRootPersonId: typeof preferences?.familyTreeView?.viewRootPersonId === 'string' && preferences.familyTreeView.viewRootPersonId.trim()
+      ? preferences.familyTreeView.viewRootPersonId
+      : defaultFamilyTreeView.viewRootPersonId,
   },
 });
 
 export const normalizeDashboard = (raw = {}) => {
   const base = createEmptyStore();
   const people = normalizePeople(raw?.family?.people || base.family.people);
+  const charts = normalizeFamilyCharts(raw?.family?.charts || base.family.charts, people);
 
   return {
     version: 4,
     profile: normalizeProfile(raw?.profile),
     family: {
+      activeChartId: raw?.family?.activeChartId && charts.some((chart) => chart.id === raw.family.activeChartId)
+        ? raw.family.activeChartId
+        : charts[0]?.id || 'chart-main',
+      charts,
       selectedPersonId: raw?.family?.selectedPersonId && people.some((person) => person.id === raw.family.selectedPersonId)
         ? raw.family.selectedPersonId
         : 'person-self',

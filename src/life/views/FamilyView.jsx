@@ -760,9 +760,15 @@ const buildFamilyLayout = (family, density = 'balanced') => {
   };
 };
 
-const buildFocusState = (family, layout, mode = 'lineage') => {
-  const selectedPersonId = family.selectedPersonId || 'person-self';
-  const selectedUnitKey = layout.personToUnitKey.get(selectedPersonId) || '';
+const buildFocusState = (
+  family,
+  layout,
+  mode = 'lineage',
+  viewRootPersonId = family.selectedPersonId || 'person-self',
+  selectedPersonId = family.selectedPersonId || viewRootPersonId,
+) => {
+  const rootPersonId = viewRootPersonId || 'person-self';
+  const selectedUnitKey = layout.personToUnitKey.get(rootPersonId) || '';
   const selectedUnit = selectedUnitKey ? layout.unitByKey.get(selectedUnitKey) : null;
   const ancestorUnitKeys = new Set();
   const descendantUnitKeys = new Set();
@@ -809,7 +815,7 @@ const buildFocusState = (family, layout, mode = 'lineage') => {
     });
   }
 
-  const cardRoles = new Map([[selectedPersonId, 'selected']]);
+  const cardRoles = new Map([[rootPersonId, selectedPersonId === rootPersonId ? 'selected' : 'root']]);
   const ancestorIds = new Set();
   const descendantIds = new Set();
   const spouseIds = new Set();
@@ -817,7 +823,7 @@ const buildFocusState = (family, layout, mode = 'lineage') => {
 
   if (selectedUnit?.members.length === 2) {
     selectedUnit.members.forEach((member) => {
-      if (member.id !== selectedPersonId) spouseIds.add(member.id);
+      if (member.id !== rootPersonId) spouseIds.add(member.id);
     });
   }
 
@@ -847,6 +853,9 @@ const buildFocusState = (family, layout, mode = 'lineage') => {
   descendantIds.forEach((id) => {
     if (!cardRoles.has(id)) cardRoles.set(id, 'descendant');
   });
+  if (selectedPersonId && selectedPersonId !== rootPersonId) {
+    cardRoles.set(selectedPersonId, 'selected');
+  }
 
   const focusedUnitKeys = new Set([selectedUnitKey, ...ancestorUnitKeys, ...descendantUnitKeys, ...siblingUnitKeys]);
   const focusedPersonIds = new Set();
@@ -874,6 +883,7 @@ const buildFocusState = (family, layout, mode = 'lineage') => {
     descendantCount: descendantIds.size,
     focusedUnitKeys,
     focusedPersonIds,
+    rootPersonId,
     hasBranchFocus: cardRoles.size > 1,
   };
 };
@@ -882,6 +892,10 @@ const FamilyView = ({
   family,
   viewPreferences = {},
   onChangeViewPreferences,
+  onSelectChart,
+  onCreateChart,
+  onRenameChart,
+  onDeleteChart,
   onAddPerson,
   onBulkAdd,
   onUpdatePerson,
@@ -898,6 +912,7 @@ const FamilyView = ({
   const [backupFeedback, setBackupFeedback] = useState('');
   const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [zoom, setZoom] = useState(0.64);
+  const [newChartName, setNewChartName] = useState('');
   const [familySearchQuery, setFamilySearchQuery] = useState('');
   const [focusMode, setFocusMode] = useState(viewPreferences.focusMode === 'direct' ? 'direct' : 'lineage');
   const [isolateBranch, setIsolateBranch] = useState(Boolean(viewPreferences.isolateBranch));
@@ -909,7 +924,32 @@ const FamilyView = ({
 
   const layout = useMemo(() => buildFamilyLayout(family, layoutDensity), [family, layoutDensity]);
   const directRelationLookup = useMemo(() => buildDirectRelationLookup(family), [family]);
-  const focusState = useMemo(() => buildFocusState(family, layout, focusMode), [family, layout, focusMode]);
+  const charts = family.charts || [];
+  const activeChart = charts.find((chart) => chart.id === family.activeChartId) || charts[0] || { id: 'chart-main', name: 'Main family chart', rootPersonId: 'person-self' };
+  const effectiveChartRootPersonId = useMemo(() => {
+    const requestedRootId = activeChart?.rootPersonId || 'person-self';
+    const requestedUnitKey = layout.personToUnitKey.get(requestedRootId) || layout.personToUnitKey.get('person-self') || '';
+    if (!requestedUnitKey) return requestedRootId;
+    if (activeChart?.id !== 'chart-main') return requestedRootId;
+
+    let cursor = requestedUnitKey;
+    let highestUnitKey = requestedUnitKey;
+    while (cursor) {
+      const parentUnitKey = layout.primaryParentByChild.get(cursor);
+      if (!parentUnitKey) break;
+      highestUnitKey = parentUnitKey;
+      cursor = parentUnitKey;
+    }
+
+    const highestUnit = layout.unitByKey.get(highestUnitKey);
+    return highestUnit?.members.find((member) => ['grandfather', 'grandmother', 'father', 'mother'].includes(member.relationKey))?.id
+      || highestUnit?.members[0]?.id
+      || requestedRootId;
+  }, [activeChart?.id, activeChart?.rootPersonId, layout.personToUnitKey, layout.primaryParentByChild, layout.unitByKey]);
+  const focusState = useMemo(
+    () => buildFocusState(family, layout, focusMode, effectiveChartRootPersonId, family.selectedPersonId),
+    [effectiveChartRootPersonId, family, layout, focusMode],
+  );
 
   useEffect(() => {
     setPersonDraft((current) => ({
@@ -934,6 +974,10 @@ const FamilyView = ({
     viewPreferences.layoutDensity,
     viewPreferences.showGenerationLabels,
   ]);
+
+  useEffect(() => {
+    setNewChartName(activeChart?.name || '');
+  }, [activeChart?.id, activeChart?.name]);
 
   const duplicateNameGroups = useMemo(() => {
     const groups = new Map();
@@ -1073,6 +1117,24 @@ const FamilyView = ({
     window.requestAnimationFrame(() => centerViewportOnPerson(personId));
   };
 
+  const handleSelectChart = (chartId) => {
+    onSelectChart?.(chartId);
+    setFamilySearchQuery('');
+  };
+
+  const handleCreateChartFromSelected = () => {
+    if (!selectedPerson) return;
+    onCreateChart?.({
+      name: newChartName?.trim() || `${selectedPerson.name || 'Family'} chart`,
+      rootPersonId: selectedPerson.id,
+    });
+  };
+
+  const handleRenameActiveChart = () => {
+    if (!activeChart || !newChartName.trim()) return;
+    onRenameChart?.(activeChart.id, newChartName.trim());
+  };
+
   const applyViewPreferencePatch = (patch) => {
     onChangeViewPreferences?.(patch);
   };
@@ -1118,16 +1180,33 @@ const FamilyView = ({
       layoutDensity: 'balanced',
       showGenerationLabels: true,
     });
-    onSelectPerson('person-self');
+    handleSelectChart('chart-main');
     window.requestAnimationFrame(() => centerViewportOnPerson('person-self', 0.64));
   };
 
-  const visibleUnitKeys = useMemo(() => {
-    if (!(isolateBranch && focusState.hasBranchFocus)) {
+  const chartVisibleUnitKeys = useMemo(() => {
+    const rootUnitKey = layout.personToUnitKey.get(effectiveChartRootPersonId) || '';
+    if (!rootUnitKey) {
       return new Set(layout.positionedUnits.map((unit) => unit.key));
     }
-    return new Set(focusState.focusedUnitKeys);
-  }, [focusState.focusedUnitKeys, focusState.hasBranchFocus, isolateBranch, layout.positionedUnits]);
+
+    const collected = new Set();
+    const walk = (unitKey) => {
+      if (!unitKey || collected.has(unitKey)) return;
+      collected.add(unitKey);
+      (layout.childrenByParent.get(unitKey) || []).forEach(walk);
+    };
+
+    walk(rootUnitKey);
+    return collected;
+  }, [effectiveChartRootPersonId, layout.childrenByParent, layout.personToUnitKey, layout.positionedUnits]);
+
+  const visibleUnitKeys = useMemo(() => {
+    if (!(isolateBranch && focusState.hasBranchFocus)) {
+      return chartVisibleUnitKeys;
+    }
+    return new Set([...chartVisibleUnitKeys].filter((unitKey) => focusState.focusedUnitKeys.has(unitKey)));
+  }, [chartVisibleUnitKeys, focusState.focusedUnitKeys, focusState.hasBranchFocus, isolateBranch]);
 
   const visibleUnits = useMemo(
     () => layout.positionedUnits.filter((unit) => visibleUnitKeys.has(unit.key)),
@@ -1188,6 +1267,63 @@ const FamilyView = ({
   return (
     <div className="grid gap-6 xl:grid-cols-[390px,minmax(0,1fr)]">
       <div className="space-y-6">
+        <section className="life-panel">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-indigo-500/12 p-3 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">
+              <GitBranchPlus size={18} />
+            </div>
+            <div>
+              <p className="life-card-label">Family charts</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                Save separate charts for your side, your wife&apos;s side, or any in-law family.
+              </h2>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            {charts.map((chart) => (
+              <button
+                key={chart.id}
+                type="button"
+                onClick={() => handleSelectChart(chart.id)}
+                className={chart.id === activeChart.id ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap'}
+              >
+                {chart.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <label className="space-y-2">
+              <span className="life-card-label">Chart name</span>
+              <input
+                value={newChartName}
+                onChange={(event) => setNewChartName(event.target.value)}
+                placeholder="Wife side family"
+                className="life-input"
+              />
+            </label>
+
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={handleCreateChartFromSelected} className="life-primary-button">
+                Create chart from selected person
+              </button>
+              <button type="button" onClick={handleRenameActiveChart} className="life-secondary-button">
+                Rename current chart
+              </button>
+              {activeChart.id !== 'chart-main' ? (
+                <button type="button" onClick={() => onDeleteChart?.(activeChart.id)} className="life-danger-button">
+                  Delete current chart
+                </button>
+              ) : null}
+            </div>
+
+            <p className="text-xs leading-5 text-slate-500 dark:text-white/55">
+              Best result: create a chart from the elder or root person of that family side, like your wife&apos;s father, her grandfather, or your sister&apos;s in-law family elder.
+            </p>
+          </div>
+        </section>
+
         <section ref={quickAddSectionRef} className="life-panel">
           <div className="flex items-start gap-3">
             <div className="rounded-2xl bg-sky-500/12 p-3 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">
@@ -1755,10 +1891,10 @@ const FamilyView = ({
           <div>
             <p className="life-card-label">Family map</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Generational layout with search, branch focus, and more breathing room between families.
+              {activeChart.name}
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-white/55">
-              Click a card to follow that person&apos;s lineage. You can search for anyone, isolate the branch, and switch between direct-family focus or the full lineage.
+              This chart shows one family side at a time, so your main family, your wife&apos;s side, or any in-law family can stay separate instead of crowding one chart.
             </p>
           </div>
 
@@ -1891,7 +2027,7 @@ const FamilyView = ({
             <p className="mt-2"><span className="font-semibold text-slate-900 dark:text-white">Dark card</span> = selected person</p>
           </div>
           <div className="rounded-[1.2rem] border border-sky-200 bg-sky-50/85 px-4 py-3 text-sm text-sky-700 backdrop-blur dark:border-sky-400/30 dark:bg-sky-500/12 dark:text-sky-200">
-            Ancestors are blue and descendants stay green.
+            Root of the current chart is indigo. Ancestors are blue and descendants stay green.
           </div>
           <div className="rounded-[1.2rem] border border-violet-200 bg-violet-50/85 px-4 py-3 text-sm text-violet-700 backdrop-blur dark:border-violet-400/30 dark:bg-violet-500/12 dark:text-violet-200">
             Spouses are violet and sibling branch context stays amber.
@@ -2057,11 +2193,13 @@ const FamilyView = ({
                     const relationMeta = directRelationLookup.get(person.id) || getRelationMeta(person.relationKey, person.relationLabel, person.relationHindi);
                     const isSelected = person.id === family.selectedPersonId;
                     const cardRole = focusState.cardRoles.get(person.id) || 'default';
-                    const isHighlightedRelative = cardRole === 'spouse' || cardRole === 'ancestor' || cardRole === 'descendant' || cardRole === 'sibling';
+                    const isHighlightedRelative = cardRole === 'root' || cardRole === 'spouse' || cardRole === 'ancestor' || cardRole === 'descendant' || cardRole === 'sibling';
                     const shouldDim = focusState.hasBranchFocus && !isSelected && !isHighlightedRelative;
                     const left = index * (CARD_WIDTH + PARTNER_GAP);
                     const cardClass = isSelected
                       ? 'absolute rounded-[1.4rem] border border-slate-950 bg-slate-950 p-4 text-left text-white shadow-lg dark:border-white dark:bg-white dark:text-slate-950'
+                      : cardRole === 'root'
+                        ? 'absolute rounded-[1.4rem] border border-indigo-200 bg-indigo-50/92 p-4 text-left text-slate-900 shadow-[0_18px_40px_rgba(79,70,229,0.14)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg dark:border-indigo-400/30 dark:bg-indigo-500/12 dark:text-white'
                       : cardRole === 'spouse'
                         ? 'absolute rounded-[1.4rem] border border-violet-200 bg-violet-50/92 p-4 text-left text-slate-900 shadow-[0_18px_40px_rgba(124,58,237,0.14)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg dark:border-violet-400/30 dark:bg-violet-500/12 dark:text-white'
                         : cardRole === 'sibling'
@@ -2075,6 +2213,8 @@ const FamilyView = ({
                               : 'absolute rounded-[1.4rem] border border-white/90 bg-white/82 p-4 text-left text-slate-900 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-slate-950/82 dark:text-white';
                     const relationClass = isSelected
                       ? 'mt-1 text-sm font-semibold text-white/85 dark:text-slate-700'
+                      : cardRole === 'root'
+                        ? 'mt-1 text-sm font-semibold text-indigo-700 dark:text-indigo-200'
                       : cardRole === 'spouse'
                         ? 'mt-1 text-sm font-semibold text-violet-700 dark:text-violet-200'
                         : cardRole === 'sibling'
@@ -2086,6 +2226,8 @@ const FamilyView = ({
                             : 'mt-1 text-sm font-semibold text-slate-500 dark:text-white/60';
                     const hindiClass = isSelected
                       ? 'text-xs text-white/65 dark:text-slate-600'
+                      : cardRole === 'root'
+                        ? 'text-xs text-indigo-500 dark:text-indigo-200/75'
                       : cardRole === 'spouse'
                         ? 'text-xs text-violet-500 dark:text-violet-200/75'
                         : cardRole === 'sibling'
