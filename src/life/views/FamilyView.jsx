@@ -923,26 +923,26 @@ const FamilyView = ({
   const backupInputRef = useRef(null);
   const quickAddSectionRef = useRef(null);
 
-  const layout = useMemo(() => buildFamilyLayout(family, layoutDensity), [family, layoutDensity]);
+  const fullLayout = useMemo(() => buildFamilyLayout(family, layoutDensity), [family, layoutDensity]);
   const directRelationLookup = useMemo(() => buildDirectRelationLookup(family), [family]);
   const charts = family.charts || [];
   const activeChart = charts.find((chart) => chart.id === family.activeChartId) || charts[0] || { id: 'chart-main', name: 'Main family chart', rootPersonId: 'person-self' };
   const activeChartRootPersonId = activeChart?.rootPersonId || 'person-self';
   const chartRootUnitKeys = useMemo(() => {
-    const initialUnitKey = layout.personToUnitKey.get(activeChartRootPersonId) || layout.personToUnitKey.get('person-self') || '';
+    const initialUnitKey = fullLayout.personToUnitKey.get(activeChartRootPersonId) || fullLayout.personToUnitKey.get('person-self') || '';
     if (!initialUnitKey) return [];
 
     const findRelevantParentUnitKeys = (unitKey, personIds) => {
-      const candidateUnitKeys = layout.parentCandidatesByChild.get(unitKey) || [];
-      const unit = layout.unitByKey.get(unitKey);
+      const candidateUnitKeys = fullLayout.parentCandidatesByChild.get(unitKey) || [];
+      const unit = fullLayout.unitByKey.get(unitKey);
       if (candidateUnitKeys.length <= 1 || (unit?.members.length || 0) <= 1) return candidateUnitKeys;
 
       const relevantUnitKeys = candidateUnitKeys.filter((parentUnitKey) => {
-        const parentUnit = layout.unitByKey.get(parentUnitKey);
+        const parentUnit = fullLayout.unitByKey.get(parentUnitKey);
         if (!parentUnit) return false;
 
         const anchoredToCurrentPeople = parentUnit.members.some((member) => personIds.includes(member.anchorId));
-        const explicitParentLink = layout.dedupedRelationships.some((relationship) => {
+        const explicitParentLink = fullLayout.dedupedRelationships.some((relationship) => {
           if (relationship.type !== 'parent' && relationship.type !== 'child') return false;
           if (relationship.type === 'parent') {
             return personIds.includes(relationship.targetId) && parentUnit.members.some((member) => member.id === relationship.sourceId);
@@ -970,17 +970,171 @@ const FamilyView = ({
       }
 
       relevantParents.forEach((parentUnitKey) => {
-        const parentUnit = layout.unitByKey.get(parentUnitKey);
+        const parentUnit = fullLayout.unitByKey.get(parentUnitKey);
         walkUp(parentUnitKey, parentUnit?.members.map((member) => member.id) || [], new Set([...trail, unitKey]));
       });
     };
 
     walkUp(initialUnitKey, [activeChartRootPersonId]);
     return [...resolvedRoots];
-  }, [activeChartRootPersonId, layout.dedupedRelationships, layout.parentCandidatesByChild, layout.personToUnitKey, layout.unitByKey]);
+  }, [activeChartRootPersonId, fullLayout.dedupedRelationships, fullLayout.parentCandidatesByChild, fullLayout.personToUnitKey, fullLayout.unitByKey]);
+  const chartScopeUnitKeys = useMemo(() => {
+    if (activeChart.id === 'chart-main') {
+      return new Set(fullLayout.positionedUnits.map((unit) => unit.key));
+    }
+
+    const candidateChildrenByParent = new Map();
+    fullLayout.parentCandidatesByChild.forEach((parentUnitKeys, childUnitKey) => {
+      parentUnitKeys.forEach((parentUnitKey) => {
+        const next = candidateChildrenByParent.get(parentUnitKey) || [];
+        if (!next.includes(childUnitKey)) next.push(childUnitKey);
+        candidateChildrenByParent.set(parentUnitKey, next);
+      });
+    });
+
+    const collected = new Set();
+    const walk = (unitKey) => {
+      if (!unitKey || collected.has(unitKey)) return;
+      collected.add(unitKey);
+      (candidateChildrenByParent.get(unitKey) || []).forEach(walk);
+    };
+
+    chartRootUnitKeys.forEach(walk);
+    if (collected.size === 0) {
+      const fallbackUnitKey = fullLayout.personToUnitKey.get(activeChartRootPersonId) || fullLayout.personToUnitKey.get('person-self') || '';
+      walk(fallbackUnitKey);
+    }
+
+    return collected.size > 0 ? collected : new Set(fullLayout.positionedUnits.map((unit) => unit.key));
+  }, [activeChart.id, activeChartRootPersonId, chartRootUnitKeys, fullLayout.parentCandidatesByChild, fullLayout.personToUnitKey, fullLayout.positionedUnits]);
+  const chartPersonIds = useMemo(() => {
+    if (activeChart.id === 'chart-main') {
+      return new Set(family.people.map((person) => person.id));
+    }
+
+    const peopleById = new Map((family.people || []).map((person) => [person.id, person]));
+    const parentsByPerson = new Map();
+    const childrenByPerson = new Map();
+    const siblingsByPerson = new Map();
+    const spousesByPerson = new Map();
+
+    const addLink = (map, key, value) => {
+      if (!key || !value || key === value || !peopleById.has(key) || !peopleById.has(value)) return;
+      const next = map.get(key) || new Set();
+      next.add(value);
+      map.set(key, next);
+    };
+
+    (family.people || []).forEach((person) => {
+      if (!person.anchorId || !peopleById.has(person.anchorId)) return;
+
+      if (person.relationKey === 'spouse') {
+        addLink(spousesByPerson, person.id, person.anchorId);
+        addLink(spousesByPerson, person.anchorId, person.id);
+        return;
+      }
+
+      const generationDelta = getRelationGenerationDelta(person.relationKey);
+      if (generationDelta < 0) {
+        addLink(parentsByPerson, person.anchorId, person.id);
+        addLink(childrenByPerson, person.id, person.anchorId);
+        return;
+      }
+
+      if (generationDelta > 0) {
+        addLink(childrenByPerson, person.anchorId, person.id);
+        addLink(parentsByPerson, person.id, person.anchorId);
+        return;
+      }
+
+      addLink(siblingsByPerson, person.id, person.anchorId);
+      addLink(siblingsByPerson, person.anchorId, person.id);
+    });
+
+    (family.relationships || []).forEach((relationship) => {
+      if (!peopleById.has(relationship.sourceId) || !peopleById.has(relationship.targetId)) return;
+
+      if (relationship.type === 'spouse') {
+        addLink(spousesByPerson, relationship.sourceId, relationship.targetId);
+        addLink(spousesByPerson, relationship.targetId, relationship.sourceId);
+        return;
+      }
+
+      if (relationship.type === 'sibling') {
+        addLink(siblingsByPerson, relationship.sourceId, relationship.targetId);
+        addLink(siblingsByPerson, relationship.targetId, relationship.sourceId);
+        return;
+      }
+
+      if (relationship.type === 'parent') {
+        addLink(parentsByPerson, relationship.targetId, relationship.sourceId);
+        addLink(childrenByPerson, relationship.sourceId, relationship.targetId);
+        return;
+      }
+
+      if (relationship.type === 'child') {
+        addLink(parentsByPerson, relationship.sourceId, relationship.targetId);
+        addLink(childrenByPerson, relationship.targetId, relationship.sourceId);
+      }
+    });
+
+    const ids = new Set();
+    const visitedBlood = new Set();
+
+    const includeBloodFamily = (personId) => {
+      if (!personId || visitedBlood.has(personId) || !peopleById.has(personId)) return;
+      visitedBlood.add(personId);
+      ids.add(personId);
+
+      (spousesByPerson.get(personId) || new Set()).forEach((spouseId) => {
+        ids.add(spouseId);
+        (childrenByPerson.get(spouseId) || new Set()).forEach(includeBloodFamily);
+      });
+
+      (parentsByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
+      (childrenByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
+      (siblingsByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
+    };
+
+    includeBloodFamily(activeChartRootPersonId);
+
+    if (ids.size === 0 && family.people.some((person) => person.id === activeChartRootPersonId)) {
+      ids.add(activeChartRootPersonId);
+    }
+
+    return ids;
+  }, [activeChart.id, activeChartRootPersonId, family.people, family.relationships]);
+  const layoutFamily = useMemo(() => {
+    if (activeChart.id === 'chart-main') return family;
+
+    const people = family.people.filter((person) => chartPersonIds.has(person.id));
+    if (people.length === 0) {
+      return {
+        ...family,
+        selectedPersonId: activeChartRootPersonId,
+      };
+    }
+
+    const visiblePersonIds = new Set(people.map((person) => person.id));
+    const selectedPersonId = visiblePersonIds.has(family.selectedPersonId)
+      ? family.selectedPersonId
+      : visiblePersonIds.has(activeChartRootPersonId)
+        ? activeChartRootPersonId
+        : people[0]?.id || activeChartRootPersonId;
+
+    return {
+      ...family,
+      people,
+      relationships: (family.relationships || []).filter((relationship) => (
+        visiblePersonIds.has(relationship.sourceId) && visiblePersonIds.has(relationship.targetId)
+      )),
+      selectedPersonId,
+    };
+  }, [activeChart.id, activeChartRootPersonId, chartPersonIds, family]);
+  const layout = useMemo(() => buildFamilyLayout(layoutFamily, layoutDensity), [layoutFamily, layoutDensity]);
   const focusState = useMemo(
-    () => buildFocusState(family, layout, focusMode, activeChartRootPersonId, family.selectedPersonId),
-    [activeChartRootPersonId, family, layout, focusMode],
+    () => buildFocusState(layoutFamily, layout, focusMode, activeChartRootPersonId, layoutFamily.selectedPersonId),
+    [activeChartRootPersonId, layoutFamily, layout, focusMode],
   );
 
   useEffect(() => {
@@ -1046,6 +1200,7 @@ const FamilyView = ({
     if (bounds == null || viewport == null) return;
 
     const focusLayout = layout.personLayout.get(personId)
+      || layout.personLayout.get(layoutFamily.selectedPersonId || activeChartRootPersonId || 'person-self')
       || layout.personLayout.get('person-self')
       || layout.personLayout.values().next().value;
 
@@ -1075,7 +1230,7 @@ const FamilyView = ({
     );
     const nextZoom = Number(fitted.toFixed(2));
     setZoom(nextZoom);
-    centerViewportOnPerson(family.selectedPersonId || 'person-self', nextZoom);
+    centerViewportOnPerson(layoutFamily.selectedPersonId || activeChartRootPersonId || 'person-self', nextZoom);
   };
 
   useEffect(() => {
@@ -1088,12 +1243,15 @@ const FamilyView = ({
   }, [layout.canvasHeight, layout.canvasWidth]);
 
   useEffect(() => {
-    if (!family.selectedPersonId) return undefined;
-    const id = window.requestAnimationFrame(() => centerViewportOnPerson(family.selectedPersonId));
+    if (!layoutFamily.selectedPersonId) return undefined;
+    const id = window.requestAnimationFrame(() => centerViewportOnPerson(layoutFamily.selectedPersonId));
     return () => window.cancelAnimationFrame(id);
-  }, [family.selectedPersonId, zoom, layout.canvasHeight, layout.canvasWidth]);
+  }, [activeChartRootPersonId, layoutFamily.selectedPersonId, zoom, layout.canvasHeight, layout.canvasWidth]);
 
-  const selectedPerson = family.people.find((person) => person.id === family.selectedPersonId) || family.people[0];
+  const selectedPerson = layoutFamily.people.find((person) => person.id === layoutFamily.selectedPersonId)
+    || family.people.find((person) => person.id === family.selectedPersonId)
+    || layoutFamily.people[0]
+    || family.people[0];
   const selectedAnchor = selectedPerson?.anchorId ? layout.peopleById[selectedPerson.anchorId] : null;
   const selectedRelationMeta = selectedPerson
     ? directRelationLookup.get(selectedPerson.id) || getRelationMeta(selectedPerson.relationKey, selectedPerson.relationLabel, selectedPerson.relationHindi)
@@ -1216,30 +1374,10 @@ const FamilyView = ({
     window.requestAnimationFrame(() => centerViewportOnPerson('person-self', 0.64));
   };
 
-  const chartVisibleUnitKeys = useMemo(() => {
-    if (chartRootUnitKeys.length === 0) {
-      return new Set(layout.positionedUnits.map((unit) => unit.key));
-    }
-
-    const collected = new Set();
-    const walk = (unitKey) => {
-      if (!unitKey || collected.has(unitKey)) return;
-      collected.add(unitKey);
-      (layout.childrenByParent.get(unitKey) || []).forEach(walk);
-    };
-
-    chartRootUnitKeys.forEach(walk);
-    if (collected.size === 0) {
-      const fallbackUnitKey = layout.personToUnitKey.get(activeChartRootPersonId) || layout.personToUnitKey.get('person-self') || '';
-      walk(fallbackUnitKey);
-    }
-
-    if (collected.size === 0) {
-      return new Set(layout.positionedUnits.map((unit) => unit.key));
-    }
-
-    return collected;
-  }, [activeChartRootPersonId, chartRootUnitKeys, layout.childrenByParent, layout.personToUnitKey, layout.positionedUnits]);
+  const chartVisibleUnitKeys = useMemo(
+    () => new Set(layout.positionedUnits.map((unit) => unit.key)),
+    [layout.positionedUnits],
+  );
 
   const visibleUnitKeys = useMemo(() => {
     if (!(isolateBranch && focusState.hasBranchFocus)) {
