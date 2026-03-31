@@ -1285,6 +1285,11 @@ const FamilyView = ({
 
     return pathNames[0] === 'You' ? pathNames.join(' → ') : ['You', ...pathNames].join(' → ');
   }, [layout.peopleById, selectedPerson]);
+  const activeChartRootPerson = family.people.find((person) => person.id === activeChartRootPersonId) || selectedPerson;
+  const activeChartPreviewNames = layoutFamily.people
+    .map((person) => person.name || 'Unnamed person')
+    .filter(Boolean)
+    .slice(0, 5);
 
   const primeQuickAdd = (relationKey) => {
     if (!selectedPerson) return;
@@ -1510,7 +1515,7 @@ const FamilyView = ({
             <div>
               <p className="life-card-label">Family charts</p>
               <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                Save separate charts for your side, your wife&apos;s side, or any in-law family.
+                Save separate family modules for your side, your wife&apos;s side, or any in-law family.
               </h2>
             </div>
           </div>
@@ -1541,7 +1546,7 @@ const FamilyView = ({
 
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={handleCreateChartFromSelected} className="life-primary-button">
-                Create chart from selected person
+                Create module from selected person
               </button>
               <button type="button" onClick={handleRenameActiveChart} className="life-secondary-button">
                 Rename current chart
@@ -1553,8 +1558,20 @@ const FamilyView = ({
               ) : null}
             </div>
 
+            <div className="rounded-[1.2rem] border border-white/80 bg-white/70 p-4 backdrop-blur dark:border-white/10 dark:bg-white/8">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                {activeChart.name}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/55">
+                Root person: {activeChartRootPerson?.name || 'You'} • {layoutFamily.people.length} preloaded members
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-white/55">
+                Loaded now: {activeChartPreviewNames.join(', ')}{layoutFamily.people.length > activeChartPreviewNames.length ? ', ...' : ''}
+              </p>
+            </div>
+
             <p className="text-xs leading-5 text-slate-500 dark:text-white/55">
-              Best result: create a chart from the elder or root person of that family side, like your wife&apos;s father, her grandfather, or your sister&apos;s in-law family elder.
+              You can create a module from any selected person. We preload that person&apos;s family side, the direct spouse bridge, and any already-added relatives connected to that side.
             </p>
           </div>
         </section>
