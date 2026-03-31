@@ -753,6 +753,7 @@ const buildFamilyLayout = (family, density = 'balanced') => {
     peerLinks: [...peerLinksByKey.values()],
     unitByKey: new Map(positionedUnits.map((unit) => [unit.key, unit])),
     primaryParentByChild,
+    parentCandidatesByChild: new Map([...parentCandidatesByChild.entries()].map(([key, value]) => [key, [...value]])),
     childrenByParent: new Map([...orderedChildrenByParent.entries()].map(([key, value]) => [key, [...value]])),
     groupKeyByChild,
     rowGap,
@@ -926,29 +927,60 @@ const FamilyView = ({
   const directRelationLookup = useMemo(() => buildDirectRelationLookup(family), [family]);
   const charts = family.charts || [];
   const activeChart = charts.find((chart) => chart.id === family.activeChartId) || charts[0] || { id: 'chart-main', name: 'Main family chart', rootPersonId: 'person-self' };
-  const effectiveChartRootPersonId = useMemo(() => {
-    const requestedRootId = activeChart?.rootPersonId || 'person-self';
-    const requestedUnitKey = layout.personToUnitKey.get(requestedRootId) || layout.personToUnitKey.get('person-self') || '';
-    if (!requestedUnitKey) return requestedRootId;
-    if (activeChart?.id !== 'chart-main') return requestedRootId;
+  const activeChartRootPersonId = activeChart?.rootPersonId || 'person-self';
+  const chartRootUnitKeys = useMemo(() => {
+    const initialUnitKey = layout.personToUnitKey.get(activeChartRootPersonId) || layout.personToUnitKey.get('person-self') || '';
+    if (!initialUnitKey) return [];
 
-    let cursor = requestedUnitKey;
-    let highestUnitKey = requestedUnitKey;
-    while (cursor) {
-      const parentUnitKey = layout.primaryParentByChild.get(cursor);
-      if (!parentUnitKey) break;
-      highestUnitKey = parentUnitKey;
-      cursor = parentUnitKey;
-    }
+    const findRelevantParentUnitKeys = (unitKey, personIds) => {
+      const candidateUnitKeys = layout.parentCandidatesByChild.get(unitKey) || [];
+      const unit = layout.unitByKey.get(unitKey);
+      if (candidateUnitKeys.length <= 1 || (unit?.members.length || 0) <= 1) return candidateUnitKeys;
 
-    const highestUnit = layout.unitByKey.get(highestUnitKey);
-    return highestUnit?.members.find((member) => ['grandfather', 'grandmother', 'father', 'mother'].includes(member.relationKey))?.id
-      || highestUnit?.members[0]?.id
-      || requestedRootId;
-  }, [activeChart?.id, activeChart?.rootPersonId, layout.personToUnitKey, layout.primaryParentByChild, layout.unitByKey]);
+      const relevantUnitKeys = candidateUnitKeys.filter((parentUnitKey) => {
+        const parentUnit = layout.unitByKey.get(parentUnitKey);
+        if (!parentUnit) return false;
+
+        const anchoredToCurrentPeople = parentUnit.members.some((member) => personIds.includes(member.anchorId));
+        const explicitParentLink = layout.dedupedRelationships.some((relationship) => {
+          if (relationship.type !== 'parent' && relationship.type !== 'child') return false;
+          if (relationship.type === 'parent') {
+            return personIds.includes(relationship.targetId) && parentUnit.members.some((member) => member.id === relationship.sourceId);
+          }
+          return personIds.includes(relationship.sourceId) && parentUnit.members.some((member) => member.id === relationship.targetId);
+        });
+
+        return anchoredToCurrentPeople || explicitParentLink;
+      });
+
+      return relevantUnitKeys.length > 0 ? relevantUnitKeys : candidateUnitKeys;
+    };
+
+    const resolvedRoots = new Set();
+    const walkUp = (unitKey, personIds, trail = new Set()) => {
+      if (!unitKey || trail.has(unitKey)) {
+        if (unitKey) resolvedRoots.add(unitKey);
+        return;
+      }
+
+      const relevantParents = findRelevantParentUnitKeys(unitKey, personIds);
+      if (relevantParents.length === 0) {
+        resolvedRoots.add(unitKey);
+        return;
+      }
+
+      relevantParents.forEach((parentUnitKey) => {
+        const parentUnit = layout.unitByKey.get(parentUnitKey);
+        walkUp(parentUnitKey, parentUnit?.members.map((member) => member.id) || [], new Set([...trail, unitKey]));
+      });
+    };
+
+    walkUp(initialUnitKey, [activeChartRootPersonId]);
+    return [...resolvedRoots];
+  }, [activeChartRootPersonId, layout.dedupedRelationships, layout.parentCandidatesByChild, layout.personToUnitKey, layout.unitByKey]);
   const focusState = useMemo(
-    () => buildFocusState(family, layout, focusMode, effectiveChartRootPersonId, family.selectedPersonId),
-    [effectiveChartRootPersonId, family, layout, focusMode],
+    () => buildFocusState(family, layout, focusMode, activeChartRootPersonId, family.selectedPersonId),
+    [activeChartRootPersonId, family, layout, focusMode],
   );
 
   useEffect(() => {
@@ -1185,8 +1217,7 @@ const FamilyView = ({
   };
 
   const chartVisibleUnitKeys = useMemo(() => {
-    const rootUnitKey = layout.personToUnitKey.get(effectiveChartRootPersonId) || '';
-    if (!rootUnitKey) {
+    if (chartRootUnitKeys.length === 0) {
       return new Set(layout.positionedUnits.map((unit) => unit.key));
     }
 
@@ -1197,9 +1228,9 @@ const FamilyView = ({
       (layout.childrenByParent.get(unitKey) || []).forEach(walk);
     };
 
-    walk(rootUnitKey);
+    chartRootUnitKeys.forEach(walk);
     return collected;
-  }, [effectiveChartRootPersonId, layout.childrenByParent, layout.personToUnitKey, layout.positionedUnits]);
+  }, [chartRootUnitKeys, layout.childrenByParent, layout.positionedUnits]);
 
   const visibleUnitKeys = useMemo(() => {
     if (!(isolateBranch && focusState.hasBranchFocus)) {
