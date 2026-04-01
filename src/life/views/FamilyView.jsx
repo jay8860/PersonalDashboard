@@ -270,6 +270,136 @@ const buildDirectRelationLookup = (family) => {
   return new Map((family.people || []).map((person) => [person.id, resolve(person.id)]));
 };
 
+const buildFamilyModulePersonIds = (family, rootPersonId) => {
+  const peopleById = new Map((family.people || []).map((person) => [person.id, person]));
+  if (!peopleById.has(rootPersonId)) return new Set(rootPersonId ? [rootPersonId] : []);
+
+  const parentsByPerson = new Map();
+  const childrenByPerson = new Map();
+  const siblingsByPerson = new Map();
+  const spousesByPerson = new Map();
+
+  const addLink = (map, key, value) => {
+    if (!key || !value || key === value || !peopleById.has(key) || !peopleById.has(value)) return;
+    const next = map.get(key) || new Set();
+    next.add(value);
+    map.set(key, next);
+  };
+
+  (family.people || []).forEach((person) => {
+    if (!person.anchorId || !peopleById.has(person.anchorId)) return;
+
+    if (person.relationKey === 'spouse') {
+      addLink(spousesByPerson, person.id, person.anchorId);
+      addLink(spousesByPerson, person.anchorId, person.id);
+      return;
+    }
+
+    const generationDelta = getRelationGenerationDelta(person.relationKey);
+    if (generationDelta < 0) {
+      addLink(parentsByPerson, person.anchorId, person.id);
+      addLink(childrenByPerson, person.id, person.anchorId);
+      return;
+    }
+
+    if (generationDelta > 0) {
+      addLink(childrenByPerson, person.anchorId, person.id);
+      addLink(parentsByPerson, person.id, person.anchorId);
+      return;
+    }
+
+    addLink(siblingsByPerson, person.id, person.anchorId);
+    addLink(siblingsByPerson, person.anchorId, person.id);
+  });
+
+  (family.relationships || []).forEach((relationship) => {
+    if (!peopleById.has(relationship.sourceId) || !peopleById.has(relationship.targetId)) return;
+
+    if (relationship.type === 'spouse') {
+      addLink(spousesByPerson, relationship.sourceId, relationship.targetId);
+      addLink(spousesByPerson, relationship.targetId, relationship.sourceId);
+      return;
+    }
+
+    if (relationship.type === 'sibling') {
+      addLink(siblingsByPerson, relationship.sourceId, relationship.targetId);
+      addLink(siblingsByPerson, relationship.targetId, relationship.sourceId);
+      return;
+    }
+
+    if (relationship.type === 'parent') {
+      addLink(parentsByPerson, relationship.targetId, relationship.sourceId);
+      addLink(childrenByPerson, relationship.sourceId, relationship.targetId);
+      return;
+    }
+
+    if (relationship.type === 'child') {
+      addLink(parentsByPerson, relationship.sourceId, relationship.targetId);
+      addLink(childrenByPerson, relationship.targetId, relationship.sourceId);
+    }
+  });
+
+  const inferSpousePairsFromSharedChildren = () => {
+    const parentsPerChild = new Map();
+    parentsByPerson.forEach((parents, childId) => {
+      const parentList = [...parents].sort();
+      if (parentList.length < 2) return;
+      parentsPerChild.set(childId, parentList);
+    });
+
+    parentsPerChild.forEach((parentList) => {
+      parentList.forEach((leftId, index) => {
+        parentList.slice(index + 1).forEach((rightId) => {
+          addLink(spousesByPerson, leftId, rightId);
+          addLink(spousesByPerson, rightId, leftId);
+        });
+      });
+    });
+  };
+
+  const inferSiblingPairsFromSharedParents = () => {
+    const childrenPerParent = new Map();
+    childrenByPerson.forEach((children, parentId) => {
+      const childList = [...children].sort();
+      if (childList.length < 2) return;
+      childrenPerParent.set(parentId, childList);
+    });
+
+    childrenPerParent.forEach((childList) => {
+      childList.forEach((leftId, index) => {
+        childList.slice(index + 1).forEach((rightId) => {
+          addLink(siblingsByPerson, leftId, rightId);
+          addLink(siblingsByPerson, rightId, leftId);
+        });
+      });
+    });
+  };
+
+  inferSpousePairsFromSharedChildren();
+  inferSiblingPairsFromSharedParents();
+
+  const ids = new Set();
+  const visitedBlood = new Set();
+
+  const includeBloodFamily = (personId) => {
+    if (!personId || visitedBlood.has(personId) || !peopleById.has(personId)) return;
+    visitedBlood.add(personId);
+    ids.add(personId);
+
+    (spousesByPerson.get(personId) || new Set()).forEach((spouseId) => {
+      ids.add(spouseId);
+      (childrenByPerson.get(spouseId) || new Set()).forEach(includeBloodFamily);
+    });
+
+    (parentsByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
+    (childrenByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
+    (siblingsByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
+  };
+
+  includeBloodFamily(rootPersonId);
+  return ids.size > 0 ? ids : new Set([rootPersonId]);
+};
+
 const buildOrthogonalPath = (startX, startY, endX, endY) => {
   if (Math.abs(endY - startY) < 8) {
     return `M ${startX} ${startY} H ${endX}`;
@@ -1011,98 +1141,7 @@ const FamilyView = ({
     if (activeChart.id === 'chart-main') {
       return new Set(family.people.map((person) => person.id));
     }
-
-    const peopleById = new Map((family.people || []).map((person) => [person.id, person]));
-    const parentsByPerson = new Map();
-    const childrenByPerson = new Map();
-    const siblingsByPerson = new Map();
-    const spousesByPerson = new Map();
-
-    const addLink = (map, key, value) => {
-      if (!key || !value || key === value || !peopleById.has(key) || !peopleById.has(value)) return;
-      const next = map.get(key) || new Set();
-      next.add(value);
-      map.set(key, next);
-    };
-
-    (family.people || []).forEach((person) => {
-      if (!person.anchorId || !peopleById.has(person.anchorId)) return;
-
-      if (person.relationKey === 'spouse') {
-        addLink(spousesByPerson, person.id, person.anchorId);
-        addLink(spousesByPerson, person.anchorId, person.id);
-        return;
-      }
-
-      const generationDelta = getRelationGenerationDelta(person.relationKey);
-      if (generationDelta < 0) {
-        addLink(parentsByPerson, person.anchorId, person.id);
-        addLink(childrenByPerson, person.id, person.anchorId);
-        return;
-      }
-
-      if (generationDelta > 0) {
-        addLink(childrenByPerson, person.anchorId, person.id);
-        addLink(parentsByPerson, person.id, person.anchorId);
-        return;
-      }
-
-      addLink(siblingsByPerson, person.id, person.anchorId);
-      addLink(siblingsByPerson, person.anchorId, person.id);
-    });
-
-    (family.relationships || []).forEach((relationship) => {
-      if (!peopleById.has(relationship.sourceId) || !peopleById.has(relationship.targetId)) return;
-
-      if (relationship.type === 'spouse') {
-        addLink(spousesByPerson, relationship.sourceId, relationship.targetId);
-        addLink(spousesByPerson, relationship.targetId, relationship.sourceId);
-        return;
-      }
-
-      if (relationship.type === 'sibling') {
-        addLink(siblingsByPerson, relationship.sourceId, relationship.targetId);
-        addLink(siblingsByPerson, relationship.targetId, relationship.sourceId);
-        return;
-      }
-
-      if (relationship.type === 'parent') {
-        addLink(parentsByPerson, relationship.targetId, relationship.sourceId);
-        addLink(childrenByPerson, relationship.sourceId, relationship.targetId);
-        return;
-      }
-
-      if (relationship.type === 'child') {
-        addLink(parentsByPerson, relationship.sourceId, relationship.targetId);
-        addLink(childrenByPerson, relationship.targetId, relationship.sourceId);
-      }
-    });
-
-    const ids = new Set();
-    const visitedBlood = new Set();
-
-    const includeBloodFamily = (personId) => {
-      if (!personId || visitedBlood.has(personId) || !peopleById.has(personId)) return;
-      visitedBlood.add(personId);
-      ids.add(personId);
-
-      (spousesByPerson.get(personId) || new Set()).forEach((spouseId) => {
-        ids.add(spouseId);
-        (childrenByPerson.get(spouseId) || new Set()).forEach(includeBloodFamily);
-      });
-
-      (parentsByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
-      (childrenByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
-      (siblingsByPerson.get(personId) || new Set()).forEach(includeBloodFamily);
-    };
-
-    includeBloodFamily(activeChartRootPersonId);
-
-    if (ids.size === 0 && family.people.some((person) => person.id === activeChartRootPersonId)) {
-      ids.add(activeChartRootPersonId);
-    }
-
-    return ids;
+    return buildFamilyModulePersonIds(family, activeChartRootPersonId);
   }, [activeChart.id, activeChartRootPersonId, family.people, family.relationships]);
   const layoutFamily = useMemo(() => {
     if (activeChart.id === 'chart-main') return family;
@@ -1289,6 +1328,14 @@ const FamilyView = ({
   const activeChartPreviewNames = layoutFamily.people
     .map((person) => person.name || 'Unnamed person')
     .filter(Boolean)
+    .slice(0, 5);
+  const selectedModulePreviewIds = useMemo(
+    () => buildFamilyModulePersonIds(family, selectedPerson?.id || family.selectedPersonId || 'person-self'),
+    [family, selectedPerson?.id],
+  );
+  const selectedModulePreviewNames = family.people
+    .filter((person) => selectedModulePreviewIds.has(person.id))
+    .map((person) => person.name || 'Unnamed person')
     .slice(0, 5);
 
   const primeQuickAdd = (relationKey) => {
@@ -1546,7 +1593,7 @@ const FamilyView = ({
 
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={handleCreateChartFromSelected} className="life-primary-button">
-                Create module from selected person
+                Create module from {selectedPerson?.name || 'selected person'}
               </button>
               <button type="button" onClick={handleRenameActiveChart} className="life-secondary-button">
                 Rename current chart
@@ -1567,6 +1614,18 @@ const FamilyView = ({
               </p>
               <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-white/55">
                 Loaded now: {activeChartPreviewNames.join(', ')}{layoutFamily.people.length > activeChartPreviewNames.length ? ', ...' : ''}
+              </p>
+            </div>
+
+            <div className="rounded-[1.2rem] border border-indigo-200/70 bg-indigo-50/70 p-4 backdrop-blur dark:border-indigo-400/20 dark:bg-indigo-500/10">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                If you create a new module right now
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/55">
+                Root person: {selectedPerson?.name || 'You'} • {selectedModulePreviewIds.size} people would load
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-white/55">
+                Preview: {selectedModulePreviewNames.join(', ')}{selectedModulePreviewIds.size > selectedModulePreviewNames.length ? ', ...' : ''}
               </p>
             </div>
 
