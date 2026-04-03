@@ -2,7 +2,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { GoogleAIFileManager } = require('@google/generative-ai/server');
 const fs = require('fs');
 
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 const getApiKey = () => (
   process.env.GEMINI_API_KEY
