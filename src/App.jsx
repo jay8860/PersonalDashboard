@@ -9,6 +9,7 @@ import {
 } from 'react';
 import {
   Activity,
+  Apple,
   BadgeIndianRupee,
   BellRing,
   ChevronDown,
@@ -30,6 +31,7 @@ import { hasMeaningfulProfileData, loadStoredProfile, replaceStoredProfile } fro
 import HealthDashboard from './health/HealthDashboard.jsx';
 import { getDailyNotes, getHealthData, getMeasurements, getTimeline } from './health/api.js';
 import { deletePortalDocument, getPortalState, listPortalDocuments, putPortalState, uploadPortalDocument } from './life/api.js';
+import { generateAiMealPlan } from './life/api.js';
 import {
   buildFinanceOverview,
   buildHealthTimelineItems,
@@ -38,6 +40,12 @@ import {
   getTakenTodayCount,
   getUpcomingFamilyBirthdays,
 } from './life/dashboardData.js';
+import {
+  generateMealPlans,
+  getMealCompletionSummary,
+  getUpcomingMealPlan,
+  isMealSlotId,
+} from './life/meals.js';
 import {
   buildAutoRelationship,
   getCanonicalRelationshipKey,
@@ -61,6 +69,7 @@ import {
 import FamilyView from './life/views/FamilyView.jsx';
 import FitnessView from './life/views/FitnessView.jsx';
 import HomeOverview from './life/views/HomeOverview.jsx';
+import MealsView from './life/views/MealsView.jsx';
 import PlannerView from './life/views/PlannerView.jsx';
 import ProfileView from './life/views/ProfileView.jsx';
 import ReviewView from './life/views/ReviewView.jsx';
@@ -73,6 +82,7 @@ let portalBootstrapCache = null;
 
 const tabItems = [
   { id: 'home', label: 'Home', icon: LayoutDashboard },
+  { id: 'meals', label: 'Meals', icon: Apple },
   { id: 'planner', label: 'Planner', icon: BellRing },
   { id: 'health', label: 'Health', icon: HeartPulse },
   { id: 'finance', label: 'Finance', icon: BadgeIndianRupee },
@@ -571,6 +581,8 @@ function App() {
   const activeMedicines = useMemo(() => getActiveMedicines(dashboard.planner.medicines), [dashboard.planner.medicines]);
   const takenTodayCount = useMemo(() => getTakenTodayCount(dashboard.planner.medicines), [dashboard.planner.medicines]);
   const upcomingBirthdays = useMemo(() => getUpcomingFamilyBirthdays(dashboard.family.people, 45), [dashboard.family.people]);
+  const upcomingMealPlan = useMemo(() => getUpcomingMealPlan(dashboard.meals.generatedPlans), [dashboard.meals.generatedPlans]);
+  const upcomingMealSummary = useMemo(() => getMealCompletionSummary(upcomingMealPlan), [upcomingMealPlan]);
   const weeklyReview = useMemo(
     () => buildWeeklyReviewData({
       dashboard,
@@ -581,6 +593,8 @@ function App() {
     [dashboard, financeProfile, healthFeed, portalDocuments],
   );
   const statusTags = [
+    dashboard.meals.generatedPlans.length ? `${dashboard.meals.generatedPlans.length} meal day${dashboard.meals.generatedPlans.length === 1 ? '' : 's'} ready` : null,
+    upcomingMealPlan ? `${upcomingMealSummary.completed}/${upcomingMealSummary.total} meals done next plan` : null,
     medicinesVisible && activeMedicines.length ? `${activeMedicines.length} active medicine${activeMedicines.length === 1 ? '' : 's'}` : null,
     medicinesVisible && takenTodayCount ? `${takenTodayCount} taken today` : null,
     dashboard.family.people.length > 1 ? `${dashboard.family.people.length} family records` : null,
@@ -1024,6 +1038,97 @@ function App() {
     }));
   };
 
+  const updateMeals = (patch) => {
+    updateDashboard((current) => ({
+      ...current,
+      meals: {
+        ...current.meals,
+        ...patch,
+      },
+    }));
+  };
+
+  const updateMealRule = (slotId, patch) => {
+    if (!isMealSlotId(slotId)) return;
+
+    updateDashboard((current) => ({
+      ...current,
+      meals: {
+        ...current.meals,
+        mealRules: {
+          ...current.meals.mealRules,
+          [slotId]: {
+            ...current.meals.mealRules[slotId],
+            ...patch,
+          },
+        },
+      },
+    }));
+  };
+
+  const regenerateMealPlans = ({ startDate, days }) => {
+    updateDashboard((current) => ({
+      ...current,
+      meals: {
+        ...current.meals,
+        generatedPlans: generateMealPlans(current.meals, { startDate, days }),
+      },
+    }));
+  };
+
+  const generateAiBackedMealPlans = async ({ startDate, days }) => {
+    const response = await generateAiMealPlan({
+      meals: dashboard.meals,
+      profile: dashboard.profile,
+      fitness: dashboard.fitness,
+      options: { startDate, days },
+    });
+
+    updateDashboard((current) => ({
+      ...current,
+      meals: {
+        ...current.meals,
+        aiGuidance: Array.isArray(response?.aiGuidance) ? response.aiGuidance : current.meals.aiGuidance,
+        generatedPlans: Array.isArray(response?.generatedPlans) ? response.generatedPlans : current.meals.generatedPlans,
+      },
+    }));
+  };
+
+  const toggleMealCompleted = (planId, slotId) => {
+    if (!isMealSlotId(slotId)) return;
+
+    updateDashboard((current) => ({
+      ...current,
+      meals: {
+        ...current.meals,
+        generatedPlans: current.meals.generatedPlans.map((plan) => (
+          plan.id === planId
+            ? {
+              ...plan,
+              meals: {
+                ...plan.meals,
+                [slotId]: {
+                  ...plan.meals[slotId],
+                  completed: !plan.meals[slotId]?.completed,
+                },
+              },
+            }
+            : plan
+        )),
+      },
+    }));
+  };
+
+  const clearGeneratedMealPlans = () => {
+    updateDashboard((current) => ({
+      ...current,
+      meals: {
+        ...current.meals,
+        generatedPlans: [],
+      },
+    }));
+  };
+
   const updateReminder = (reminderId, patch) => {
     updateDashboard((current) => ({
       ...current,
@@ -1359,6 +1464,7 @@ function App() {
             dashboardMode={dashboard.preferences.dashboardMode}
             profile={dashboard.profile}
             family={dashboard.family}
+            meals={dashboard.meals}
             planner={{
               medicines: medicinesVisible ? activeMedicines : [],
               quickNotes: quickNotesVisible ? dashboard.planner.quickNotes : [],
@@ -1372,6 +1478,18 @@ function App() {
             hiddenSections={hiddenPlannerSections}
             onNavigate={changeTab}
             onOpenQuickAdd={showQuickAddControl ? () => setQuickAddOpen(true) : undefined}
+          />
+        );
+      case 'meals':
+        return (
+          <MealsView
+            meals={dashboard.meals}
+            onUpdateMeals={updateMeals}
+            onUpdateMealRule={updateMealRule}
+            onGeneratePlans={regenerateMealPlans}
+            onGenerateAiPlans={generateAiBackedMealPlans}
+            onToggleMealCompleted={toggleMealCompleted}
+            onClearGeneratedPlans={clearGeneratedMealPlans}
           />
         );
       case 'profile':

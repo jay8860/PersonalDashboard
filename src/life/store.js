@@ -1,3 +1,5 @@
+import { createEmptyMealsState, normalizeMealsState } from './meals.js';
+
 const STORAGE_KEY = 'life-atlas-dashboard-v4';
 
 const defaultHiddenPlannerSections = ['reminders'];
@@ -100,7 +102,7 @@ const createEmptyQuickNote = (overrides = {}) => ({
 });
 
 export const createEmptyStore = () => ({
-  version: 4,
+  version: 5,
   profile: { ...defaultProfile },
   family: {
     selectedPersonId: 'person-self',
@@ -133,6 +135,7 @@ export const createEmptyStore = () => ({
     medicines: [],
     quickNotes: [],
   },
+  meals: createEmptyMealsState(),
   preferences: {
     dashboardMode: 'today',
     hiddenTabs: [],
@@ -304,7 +307,7 @@ export const normalizeDashboard = (raw = {}) => {
   const charts = normalizeFamilyCharts(raw?.family?.charts || base.family.charts, people);
 
   return {
-    version: 4,
+    version: 5,
     profile: normalizeProfile(raw?.profile),
     family: {
       activeChartId: raw?.family?.activeChartId && charts.some((chart) => chart.id === raw.family.activeChartId)
@@ -326,6 +329,7 @@ export const normalizeDashboard = (raw = {}) => {
       medicines: normalizeMedicines(raw?.planner?.medicines),
       quickNotes: normalizeQuickNotes(raw?.planner?.quickNotes),
     },
+    meals: normalizeMealsState(raw?.meals),
     preferences: normalizePreferences(raw?.preferences),
     updatedAt: raw?.updatedAt || null,
   };
@@ -363,6 +367,12 @@ export const hasMeaningfulDashboardData = (dashboard) => {
     || next.planner.reminders.length > 0
     || next.planner.medicines.length > 0
     || next.planner.quickNotes.length > 0
+    || next.meals.generatedPlans.length > 0
+    || next.meals.pantryItems.length > 0
+    || next.meals.aiGuidance.length > 0
+    || Object.values(next.meals.mealRules || {}).some((rule) => (
+      rule.fixedItems.length > 0 || rule.flexibleItems.length > 0 || rule.exampleMeals.length > 0
+    ))
   );
 };
 

@@ -53,3 +53,9 @@ export const deletePortalDocument = async (id) => request('/portal/documents/' +
 });
 
 export const getPortalDocumentDownloadUrl = (id) => API_BASE_URL + '/portal/documents/' + String(id) + '/download';
+
+export const generateAiMealPlan = async (payload) => request('/meals/generate-ai', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload),
+});

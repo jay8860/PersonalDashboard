@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import {
   Activity,
+  Apple,
   ArrowRight,
   BadgeIndianRupee,
   CalendarRange,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../../finance/utils/format.js';
 import { formatFriendlyDate } from '../dashboardData.js';
+import { getMealCompletionSummary, getUpcomingMealPlan } from '../meals.js';
 
 const buildWelcomeLine = (profile) => {
   const parts = [profile.city, profile.country, profile.occupation].filter(Boolean);
@@ -28,6 +30,7 @@ const HomeOverview = ({
   dashboardMode,
   profile,
   family,
+  meals,
   planner,
   fitness,
   financeOverview,
@@ -45,6 +48,8 @@ const HomeOverview = ({
   const medicinesVisible = !hiddenSections.includes('medicines');
   const recentDocuments = (documents || []).slice(0, 4);
   const topHealthItem = healthTimeline[0];
+  const upcomingMealPlan = getUpcomingMealPlan(meals.generatedPlans);
+  const mealCompletion = getMealCompletionSummary(upcomingMealPlan);
 
   const headlineCards = [
     medicinesVisible ? {
@@ -57,6 +62,18 @@ const HomeOverview = ({
       panelClass: 'bg-gradient-to-br from-fuchsia-100/80 via-white/70 to-rose-100/65 dark:from-fuchsia-500/12 dark:via-slate-950/70 dark:to-rose-500/10',
       iconClass: 'bg-fuchsia-500/12 text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-200',
     } : null,
+    {
+      title: 'Meal plan',
+      value: upcomingMealPlan ? formatFriendlyDate(upcomingMealPlan.date) : 'Not generated',
+      detail: upcomingMealPlan
+        ? `${mealCompletion.completed}/${mealCompletion.total} meals done`
+        : 'Build your weekly or monthly chart',
+      icon: Apple,
+      action: () => onNavigate('meals'),
+      actionLabel: 'Open meals',
+      panelClass: 'bg-gradient-to-br from-amber-100/80 via-white/70 to-lime-100/65 dark:from-amber-500/12 dark:via-slate-950/70 dark:to-lime-500/10',
+      iconClass: 'bg-amber-500/12 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
+    },
     {
       title: 'This month spend',
       value: formatCurrency(financeOverview.currentMonthSpend || 0),
@@ -80,6 +97,14 @@ const HomeOverview = ({
   ].filter(Boolean);
 
   const priorityShortcuts = [
+    {
+      title: 'Meals',
+      value: upcomingMealPlan ? formatFriendlyDate(upcomingMealPlan.date) : 'Create plan',
+      detail: meals.generatedPlans.length ? `${meals.generatedPlans.length} planned days ready` : 'Decide your food once, then follow it',
+      icon: Apple,
+      action: () => onNavigate('meals'),
+      iconClass: 'bg-amber-500/12 text-amber-700 dark:bg-amber-500/18 dark:text-amber-200',
+    },
     {
       title: 'Family tree',
       value: `${family.people.length} people`,

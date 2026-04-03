@@ -11,7 +11,7 @@ const { parseCSVHealth } = require('./parsers/csv_parser');
 const { parseExcelHealth } = require('./parsers/excel_parser');
 const { parseECG } = require('./parsers/ecg_parser');
 const { parseCDA } = require('./parsers/cda_parser');
-const { analyzeReport } = require('./services/ai_service');
+const { analyzeReport, generateMealPlanWithAI, getAiApiKeyConfigured } = require('./services/ai_service');
 const {
     getPortalState,
     setPortalState,
@@ -114,6 +114,13 @@ app.get('/api/health-check', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });
 });
 
+app.get('/api/ai/status', (req, res) => {
+    res.json({
+        configured: getAiApiKeyConfigured(),
+        provider: 'google-gemini',
+    });
+});
+
 // Login Route
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
@@ -121,6 +128,20 @@ app.post('/api/login', (req, res) => {
         res.json({ success: true, token: 'mock-jwt-token' });
     } else {
         res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+});
+
+app.post('/api/meals/generate-ai', async (req, res) => {
+    try {
+        const result = await generateMealPlanWithAI(req.body || {});
+        res.json(result);
+    } catch (error) {
+        console.error('AI meal generation failed:', error);
+        const statusCode = /missing/i.test(error.message) || /api key/i.test(error.message) ? 400 : 500;
+        res.status(statusCode).json({
+            error: 'Unable to generate AI meal plan',
+            details: error.message,
+        });
     }
 });
 

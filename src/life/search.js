@@ -116,6 +116,54 @@ export const buildGlobalSearchResults = ({
     });
   });
 
+  if (includesQuery([
+    dashboard?.meals?.objective,
+    dashboard?.meals?.whatsappNumber,
+    ...(dashboard?.meals?.pantryItems || []),
+    ...(dashboard?.meals?.excludedItems || []),
+  ], normalizedQuery)) {
+    pushResult({
+      id: 'meals-root',
+      tab: 'meals',
+      badge: 'Meals',
+      title: dashboard?.meals?.objective || 'Meal decider',
+      subtitle: `${(dashboard?.meals?.generatedPlans || []).length} planned day${(dashboard?.meals?.generatedPlans || []).length === 1 ? '' : 's'}`,
+    });
+  }
+
+  Object.entries(dashboard?.meals?.mealRules || {}).forEach(([slotId, rule]) => {
+    if (!includesQuery([
+      slotId,
+      ...(rule?.fixedItems || []),
+      ...(rule?.flexibleItems || []),
+      ...(rule?.exampleMeals || []),
+      rule?.note,
+    ], normalizedQuery)) {
+      return;
+    }
+
+    pushResult({
+      id: `meal-rule-${slotId}`,
+      tab: 'meals',
+      badge: 'Meal rule',
+      title: slotId.replace(/\d/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+      subtitle: [...(rule?.fixedItems || []).slice(0, 2), ...(rule?.flexibleItems || []).slice(0, 1)].filter(Boolean).join(' • '),
+    });
+  });
+
+  (dashboard?.meals?.generatedPlans || []).forEach((plan) => {
+    const mealText = Object.values(plan?.meals || {}).flatMap((entry) => [entry?.note, entry?.portion, entry?.prepNote, ...(entry?.items || [])]);
+    if (!includesQuery([plan.date, ...mealText], normalizedQuery)) return;
+
+    pushResult({
+      id: plan.id,
+      tab: 'meals',
+      badge: 'Meal plan',
+      title: `Meal plan ${compactDate(plan.date)}`,
+      subtitle: mealText.filter(Boolean).slice(0, 2).join(' • '),
+    });
+  });
+
   (documents || []).forEach((document) => {
     const relatedPerson = peopleById.get(document.family_person_id);
     if (!includesQuery([
