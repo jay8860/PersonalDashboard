@@ -1,10 +1,27 @@
 import { useMemo, useState } from 'react';
-import { Bot, CalendarDays, CheckCircle2, ClipboardCopy, MessageCircle, RefreshCcw, UtensilsCrossed } from 'lucide-react';
+import {
+  Bot,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardCopy,
+  Droplets,
+  MessageCircle,
+  RefreshCcw,
+  Replace,
+  ShoppingBasket,
+  Sparkles,
+  UtensilsCrossed,
+} from 'lucide-react';
 import { formatFriendlyDate } from '../dashboardData.js';
 import {
+  activityLevelOptions,
+  fastingModeOptions,
   formatMealPlanForSharing,
   getMealCompletionSummary,
+  getRecipeForMeal,
   getUpcomingMealPlan,
+  goalPaceOptions,
+  goalTypeOptions,
   mealSlotDefinitions,
 } from '../meals.js';
 
@@ -13,6 +30,11 @@ const parseLines = (value) => String(value || '')
   .map((item) => item.trim())
   .filter(Boolean);
 
+const progressPct = (current, target) => {
+  if (!target) return 0;
+  return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+};
+
 const MealRuleEditor = ({ slot, rule, onUpdateRule }) => (
   <section className="life-panel">
     <div className="flex items-start gap-3">
@@ -20,9 +42,9 @@ const MealRuleEditor = ({ slot, rule, onUpdateRule }) => (
         <UtensilsCrossed size={18} />
       </div>
       <div>
-        <p className="life-card-label">{slot.label}</p>
+        <p className="life-card-label">{slot.label} Rules</p>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-          Lock the staples, then leave smart room for variation.
+          Fix what must happen and leave room for intelligent rotation.
         </h2>
       </div>
     </div>
@@ -31,42 +53,42 @@ const MealRuleEditor = ({ slot, rule, onUpdateRule }) => (
       <label className="space-y-2">
         <span className="life-card-label">Mandatory items</span>
         <textarea
-          rows={5}
+          rows={4}
           value={rule.fixedItems.join('\n')}
           onChange={(event) => onUpdateRule(slot.id, { fixedItems: parseLines(event.target.value) })}
-          placeholder="3 eggs&#10;Sprouts&#10;Orange"
+          placeholder="3 eggs&#10;Sprouts"
           className="life-textarea"
         />
       </label>
 
       <label className="space-y-2">
-        <span className="life-card-label">Flexible items</span>
-        <textarea
-          rows={5}
-          value={rule.flexibleItems.join('\n')}
-          onChange={(event) => onUpdateRule(slot.id, { flexibleItems: parseLines(event.target.value) })}
-          placeholder="Greek yogurt&#10;Paneer bhurji&#10;Roasted chana"
-          className="life-textarea"
-        />
-      </label>
-
-      <label className="space-y-2 xl:col-span-2">
-        <span className="life-card-label">Example meals</span>
+        <span className="life-card-label">Flexible ingredients</span>
         <textarea
           rows={4}
-          value={rule.exampleMeals.join('\n')}
-          onChange={(event) => onUpdateRule(slot.id, { exampleMeals: parseLines(event.target.value) })}
-          placeholder="Whey shake + 3-egg bhurji + cucumber salad&#10;2 chapatis + rajma + curd"
+          value={rule.flexibleItems.join('\n')}
+          onChange={(event) => onUpdateRule(slot.id, { flexibleItems: parseLines(event.target.value) })}
+          placeholder="Paneer&#10;Curd&#10;Poha"
           className="life-textarea"
         />
       </label>
 
       <label className="space-y-2 xl:col-span-2">
-        <span className="life-card-label">Rule note</span>
+        <span className="life-card-label">Example dishes</span>
+        <textarea
+          rows={3}
+          value={rule.exampleMeals.join('\n')}
+          onChange={(event) => onUpdateRule(slot.id, { exampleMeals: parseLines(event.target.value) })}
+          placeholder="Egg bhurji with toast&#10;Moong dal chilla"
+          className="life-textarea"
+        />
+      </label>
+
+      <label className="space-y-2 xl:col-span-2">
+        <span className="life-card-label">Special note</span>
         <input
           value={rule.note}
           onChange={(event) => onUpdateRule(slot.id, { note: event.target.value })}
-          placeholder="Keep lunch lower-carb and high-protein."
+          placeholder="Keep lunch carb-controlled and protein-heavy."
           className="life-input"
         />
       </label>
@@ -74,19 +96,45 @@ const MealRuleEditor = ({ slot, rule, onUpdateRule }) => (
   </section>
 );
 
+const SummaryPill = ({ label, value }) => (
+  <div className="rounded-[1.2rem] border border-white/80 bg-white/75 px-4 py-3 dark:border-white/10 dark:bg-white/6">
+    <p className="life-card-label">{label}</p>
+    <p className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{value}</p>
+  </div>
+);
+
+const NutritionBar = ({ label, current, target }) => (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between text-sm">
+      <span className="font-semibold text-slate-700 dark:text-white/80">{label}</span>
+      <span className="text-slate-500 dark:text-white/45">{current}/{target}</span>
+    </div>
+    <div className="h-2 rounded-full bg-slate-200 dark:bg-white/10">
+      <div className="h-2 rounded-full bg-sky-500" style={{ width: `${progressPct(current, target)}%` }} />
+    </div>
+  </div>
+);
+
 const MealsView = ({
   meals,
+  plannerTargets,
+  weeklySummary,
+  shoppingList,
+  goalProgress,
+  nutritionProgress,
   onUpdateMeals,
   onUpdateMealRule,
   onGeneratePlans,
   onGenerateAiPlans,
   onToggleMealCompleted,
+  onSwapMeal,
   onClearGeneratedPlans,
 }) => {
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [copiedPlanId, setCopiedPlanId] = useState('');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [recipeEntry, setRecipeEntry] = useState(null);
   const upcomingPlan = useMemo(() => getUpcomingMealPlan(meals.generatedPlans), [meals.generatedPlans]);
   const upcomingSummary = getMealCompletionSummary(upcomingPlan);
 
@@ -122,86 +170,147 @@ const MealsView = ({
     }
   };
 
+  const plannerProfile = meals.plannerProfile || {};
+  const hydrationLiters = ((plannerTargets?.hydrationMl || 0) / 1000).toFixed(1);
+
   return (
     <div className="space-y-6">
       <section className="life-panel">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr),minmax(20rem,0.75fr)]">
+        <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
           <div>
-            <p className="life-card-label">Meal decider</p>
+            <p className="life-card-label">Intelligent meal planner</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-              Pre-decide what you will eat so the plan wins before cravings do.
+              Build a calorie-aware Indian meal chart around your ingredients, body stats, and goal.
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 dark:text-white/65">
-              Fix what must stay constant, list what can rotate, block foods you do not want, and generate a weekly or monthly meal chart you can copy or send on WhatsApp.
+              This planner now uses maintenance calories, goal calories, macro targets, fasting mode, ingredient filtering, and meal-slot calorie distribution before it generates breakfast, lunch, dinner, and two snacks.
             </p>
           </div>
 
-          <div className="grid gap-3">
-            <div className="life-soft-card bg-gradient-to-br from-emerald-100/80 via-white/75 to-teal-100/65 dark:from-emerald-500/12 dark:via-white/8 dark:to-teal-500/8">
-              <p className="life-card-label">Next planned day</p>
-              <p className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                {upcomingPlan ? formatFriendlyDate(upcomingPlan.date) : 'No plan generated yet'}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
-                {upcomingPlan
-                  ? `${upcomingSummary.completed}/${upcomingSummary.total} meals marked done`
-                  : 'Generate your first plan and it will show up here.'}
-              </p>
-            </div>
-
-            <div className="life-soft-card">
-              <p className="life-card-label">Plan coverage</p>
-              <p className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                {meals.generatedPlans.length} day{meals.generatedPlans.length === 1 ? '' : 's'}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
-                {meals.generatedPlans.length
-                  ? 'Reuse or regenerate anytime as your routine changes.'
-                  : 'The planner can generate 7, 14, or 30 days at a time.'}
-              </p>
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SummaryPill label="Maintenance" value={`${plannerTargets?.maintenanceCalories || 0} kcal`} />
+            <SummaryPill label="Goal Calories" value={`${plannerTargets?.goalCalories || 0} kcal`} />
+            <SummaryPill label="Protein Target" value={`${plannerTargets?.macros?.proteinGrams || 0} g`} />
+            <SummaryPill label="Hydration" value={`${hydrationLiters} L / day`} />
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+        {plannerTargets?.safetyWarning ? (
+          <div className="mt-4 rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
+            {plannerTargets.safetyWarning}
+          </div>
+        ) : null}
+        {plannerTargets?.proteinNote ? (
+          <div className="mt-3 rounded-[1.25rem] border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-200">
+            {plannerTargets.proteinNote}
+          </div>
+        ) : null}
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-3">
           <label className="space-y-2">
-            <span className="life-card-label">Goal</span>
+            <span className="life-card-label">Height (cm)</span>
             <input
-              value={meals.objective}
-              onChange={(event) => onUpdateMeals({ objective: event.target.value })}
-              placeholder="Lean muscle with high protein and controlled carbs"
+              value={plannerProfile.heightCm || ''}
+              onChange={(event) => onUpdateMeals({ plannerProfile: { ...plannerProfile, heightCm: event.target.value } })}
               className="life-input"
             />
           </label>
-
+          <label className="space-y-2">
+            <span className="life-card-label">Weight (kg)</span>
+            <input
+              value={plannerProfile.weightKg || ''}
+              onChange={(event) => onUpdateMeals({ plannerProfile: { ...plannerProfile, weightKg: event.target.value } })}
+              className="life-input"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="life-card-label">Age</span>
+            <input
+              value={plannerProfile.age || ''}
+              onChange={(event) => onUpdateMeals({ plannerProfile: { ...plannerProfile, age: event.target.value } })}
+              className="life-input"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="life-card-label">Gender</span>
+            <select
+              value={plannerProfile.gender || 'male'}
+              onChange={(event) => onUpdateMeals({ plannerProfile: { ...plannerProfile, gender: event.target.value } })}
+              className="life-input"
+            >
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="life-card-label">Activity Level</span>
+            <select
+              value={plannerProfile.activityLevel || 'moderately-active'}
+              onChange={(event) => onUpdateMeals({ plannerProfile: { ...plannerProfile, activityLevel: event.target.value } })}
+              className="life-input"
+            >
+              {activityLevelOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="life-card-label">Body Goal</span>
+            <select
+              value={plannerProfile.goalType || 'muscle-gain'}
+              onChange={(event) => onUpdateMeals({ plannerProfile: { ...plannerProfile, goalType: event.target.value } })}
+              className="life-input"
+            >
+              {goalTypeOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="life-card-label">Goal Pace</span>
+            <select
+              value={plannerProfile.goalPace || 'moderate'}
+              onChange={(event) => onUpdateMeals({ plannerProfile: { ...plannerProfile, goalPace: event.target.value } })}
+              className="life-input"
+            >
+              {goalPaceOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="life-card-label">Fasting Mode</span>
+            <select
+              value={plannerProfile.fastingMode || 'standard'}
+              onChange={(event) => onUpdateMeals({ plannerProfile: { ...plannerProfile, fastingMode: event.target.value } })}
+              className="life-input"
+            >
+              {fastingModeOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
           <label className="space-y-2">
             <span className="life-card-label">WhatsApp number</span>
             <input
               value={meals.whatsappNumber}
               onChange={(event) => onUpdateMeals({ whatsappNumber: event.target.value })}
-              placeholder="9198XXXXXXXX"
               className="life-input"
             />
           </label>
+        </div>
 
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
           <label className="space-y-2">
-            <span className="life-card-label">Raw materials you usually eat</span>
+            <span className="life-card-label">Available raw ingredients</span>
             <textarea
-              rows={5}
+              rows={6}
               value={meals.pantryItems.join('\n')}
               onChange={(event) => onUpdateMeals({ pantryItems: parseLines(event.target.value) })}
-              placeholder="Eggs&#10;Paneer&#10;Soya chunks&#10;Greek yogurt&#10;Cucumber"
+              placeholder="Rice&#10;Atta&#10;Paneer&#10;Eggs&#10;Curd&#10;Moong dal"
               className="life-textarea"
             />
           </label>
-
           <label className="space-y-2">
-            <span className="life-card-label">Do not eat</span>
+            <span className="life-card-label">Strictly avoid</span>
             <textarea
-              rows={5}
+              rows={6}
               value={meals.excludedItems.join('\n')}
               onChange={(event) => onUpdateMeals({ excludedItems: parseLines(event.target.value) })}
-              placeholder="Chips&#10;White bread&#10;Sugary juice"
+              placeholder="Sugar&#10;Deep fried foods&#10;Gluten"
               className="life-textarea"
             />
           </label>
@@ -238,25 +347,17 @@ const MealsView = ({
             <CalendarDays size={16} />
             Generate plan
           </button>
-
           <button type="button" onClick={() => onGeneratePlans({ startDate, days: meals.planLengthDays })} className="life-secondary-button">
             <RefreshCcw size={16} />
             Regenerate
           </button>
-
-          <button
-            type="button"
-            onClick={handleAiGeneration}
-            disabled={isGeneratingAi}
-            className="life-primary-button"
-          >
+          <button type="button" onClick={handleAiGeneration} disabled={isGeneratingAi} className="life-primary-button">
             <Bot size={16} />
             {isGeneratingAi ? 'Generating with AI...' : 'Generate with AI'}
           </button>
-
           {meals.generatedPlans.length ? (
             <button type="button" onClick={onClearGeneratedPlans} className="life-secondary-button">
-              Clear current chart
+              Clear chart
             </button>
           ) : null}
         </div>
@@ -268,11 +369,73 @@ const MealsView = ({
         ) : null}
       </section>
 
+      <section className="grid gap-6 xl:grid-cols-2">
+        <div className="life-panel">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-sky-500/12 p-3 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <p className="life-card-label">Macro Progress</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                Nutrition progress fills up as you mark meals done.
+              </h2>
+            </div>
+          </div>
+          <div className="mt-6 grid gap-4">
+            <NutritionBar label="Calories" current={nutritionProgress?.calories?.current || 0} target={nutritionProgress?.calories?.target || 0} />
+            <NutritionBar label="Protein (g)" current={nutritionProgress?.protein?.current || 0} target={nutritionProgress?.protein?.target || 0} />
+            <NutritionBar label="Carbs (g)" current={nutritionProgress?.carbs?.current || 0} target={nutritionProgress?.carbs?.target || 0} />
+            <NutritionBar label="Fat (g)" current={nutritionProgress?.fat?.current || 0} target={nutritionProgress?.fat?.target || 0} />
+          </div>
+        </div>
+
+        <div className="life-panel">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-cyan-500/12 p-3 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-200">
+              <Droplets size={18} />
+            </div>
+            <div>
+              <p className="life-card-label">Hydration & Adherence</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                Water and goal adherence should stay visible next to food.
+              </h2>
+            </div>
+          </div>
+          <div className="mt-6 grid gap-3">
+            <div className="life-soft-card">
+              <p className="life-card-label">Water target</p>
+              <p className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{hydrationLiters} L</p>
+              <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                Based on body weight × 30–35 ml.
+              </p>
+            </div>
+            <div className="life-soft-card">
+              <p className="life-card-label">Goal progress</p>
+              <div className="mt-3 grid gap-2">
+                {goalProgress?.slice(0, 7).map((item) => (
+                  <div key={item.date} className="grid grid-cols-[6rem,1fr,4rem] items-center gap-3 text-sm">
+                    <span className="text-slate-500 dark:text-white/45">{formatFriendlyDate(item.date)}</span>
+                    <div className="h-2 rounded-full bg-slate-200 dark:bg-white/10">
+                      <div
+                        className={Math.abs(item.delta) <= 75 ? 'h-2 rounded-full bg-emerald-500' : item.delta > 0 ? 'h-2 rounded-full bg-amber-500' : 'h-2 rounded-full bg-sky-500'}
+                        style={{ width: `${Math.max(8, Math.min(100, Math.round((item.actualCalories / Math.max(1, item.goalCalories)) * 100)))}%` }}
+                      />
+                    </div>
+                    <span className="text-right text-slate-500 dark:text-white/45">{item.delta > 0 ? `+${item.delta}` : item.delta}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {meals.aiGuidance?.length ? (
         <section className="life-panel">
           <p className="life-card-label">AI guidance</p>
           <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-            Strategy notes behind the suggested meals
+            Strategy notes generated around your calorie and ingredient setup.
           </h2>
           <div className="mt-6 grid gap-3">
             {meals.aiGuidance.map((item) => (
@@ -298,13 +461,84 @@ const MealsView = ({
       <section className="life-panel">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="life-card-label">Generated chart</p>
+            <p className="life-card-label">Weekly view</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Copy the day, send it across, and tick meals off as they happen.
+              See the week at a glance before you hand it to your household.
             </h2>
           </div>
           <p className="max-w-2xl text-sm leading-6 text-slate-500 dark:text-white/55">
-            The planner uses your mandatory items first, then rotates through examples and flexible options while filtering out excluded foods.
+            Average weekly calories are computed from the first seven planned days.
+          </p>
+        </div>
+        <div className="mt-6 overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-white/10">
+                <th className="pb-3 pr-4">Day</th>
+                <th className="pb-3 pr-4">Breakfast</th>
+                <th className="pb-3 pr-4">Lunch</th>
+                <th className="pb-3 pr-4">Dinner</th>
+                <th className="pb-3 pr-0 text-right">Total kcal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {weeklySummary?.rows?.map((row) => (
+                <tr key={row.date} className="border-b border-slate-100 dark:border-white/5">
+                  <td className="py-3 pr-4">{formatFriendlyDate(row.date)}</td>
+                  <td className="py-3 pr-4">{row.breakfast}</td>
+                  <td className="py-3 pr-4">{row.lunch}</td>
+                  <td className="py-3 pr-4">{row.dinner}</td>
+                  <td className="py-3 pr-0 text-right">{row.totalCalories}</td>
+                </tr>
+              ))}
+              <tr>
+                <td className="pt-4 font-bold">Avg</td>
+                <td className="pt-4" />
+                <td className="pt-4" />
+                <td className="pt-4" />
+                <td className="pt-4 text-right font-bold">{weeklySummary?.averageCalories || 0}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="life-panel">
+        <div className="flex items-start gap-3">
+          <div className="rounded-2xl bg-amber-500/12 p-3 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">
+            <ShoppingBasket size={18} />
+          </div>
+          <div>
+            <p className="life-card-label">Shopping list</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              Approximate ingredient list for the week.
+            </h2>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {shoppingList?.length ? shoppingList.map((item) => (
+            <div key={item.name} className="life-soft-card">
+              <p className="text-base font-bold capitalize text-slate-900 dark:text-white">{item.name}</p>
+              <p className="mt-2 text-sm text-slate-500 dark:text-white/55">{item.quantity} {item.unit}</p>
+            </div>
+          )) : (
+            <div className="life-soft-card">
+              <p className="text-sm leading-6 text-slate-600 dark:text-white/65">Generate at least one week to see a shopping list.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="life-panel">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="life-card-label">Generated chart</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              Daily plans with calories, macros, swaps, and recipe details.
+            </h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-6 text-slate-500 dark:text-white/55">
+            Each meal is matched against your available ingredients, exclusions, and goal calories. Swaps stay within a similar calorie band.
           </p>
         </div>
 
@@ -312,12 +546,13 @@ const MealsView = ({
           {meals.generatedPlans.length === 0 ? (
             <div className="life-soft-card">
               <p className="text-sm leading-6 text-slate-600 dark:text-white/65">
-                No meal chart yet. Set your rules above, then generate 7, 14, or 30 days.
+                No meal chart yet. Add your profile, ingredients, and rules, then generate 7, 14, or 30 days.
               </p>
             </div>
           ) : (
             meals.generatedPlans.map((plan) => {
               const summary = getMealCompletionSummary(plan);
+              const delta = Number(plan.summary?.deltaVsGoal || 0);
 
               return (
                 <div key={plan.id} className="life-soft-card">
@@ -344,25 +579,33 @@ const MealsView = ({
                     </div>
                   </div>
 
+                  <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <SummaryPill label="Maintenance" value={`${plan.summary?.maintenanceCalories || 0} kcal`} />
+                    <SummaryPill label="Goal" value={`${plan.summary?.goalCalories || 0} kcal`} />
+                    <SummaryPill label="Protein" value={`${plan.summary?.proteinTarget || 0} g`} />
+                    <SummaryPill label="Carbs" value={`${plan.summary?.carbsTarget || 0} g`} />
+                    <SummaryPill label="Fat" value={`${plan.summary?.fatTarget || 0} g`} />
+                  </div>
+
                   <div className="mt-5 grid gap-3 xl:grid-cols-2">
                     {mealSlotDefinitions.map((slot) => {
                       const entry = plan.meals?.[slot.id];
+                      const recipe = getRecipeForMeal(entry);
+
                       return (
                         <div key={slot.id} className="rounded-[1.3rem] border border-white/80 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
                           <div className="flex items-start justify-between gap-4">
                             <div>
                               <p className="life-card-label">{slot.label}</p>
-                              <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-white/75">
-                                {(entry?.items || []).join(', ') || 'TBD'}
+                              <p className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{entry?.dishName || 'TBD'}</p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-white/75">{entry?.description || ''}</p>
+                              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-white/60">
+                                Ingredients used: {(entry?.items || []).join(', ') || '—'}
                               </p>
-                              {entry?.portion ? (
-                                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-white/45">
-                                  Portion: {entry.portion}
-                                </p>
-                              ) : null}
-                              {entry?.note ? (
-                                <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-white/45">{entry.note}</p>
-                              ) : null}
+                              <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-white/80">Portion: {entry?.portion || '—'}</p>
+                              <p className="mt-2 text-sm text-slate-500 dark:text-white/55">
+                                Calories: {entry?.calories || 0} kcal | Protein: {entry?.protein || 0} g | Carbs: {entry?.carbs || 0} g | Fat: {entry?.fat || 0} g
+                              </p>
                               {entry?.prepNote ? (
                                 <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-white/45">Prep: {entry.prepNote}</p>
                               ) : null}
@@ -377,9 +620,51 @@ const MealsView = ({
                               {entry?.completed ? 'Done' : 'Mark done'}
                             </button>
                           </div>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <button type="button" onClick={() => onSwapMeal(plan.id, slot.id)} className="life-secondary-button px-3 py-2">
+                              <Replace size={15} />
+                              Swap meal
+                            </button>
+                            {recipe ? (
+                              <button type="button" onClick={() => setRecipeEntry(recipe)} className="life-secondary-button px-3 py-2">
+                                <Sparkles size={15} />
+                                Recipe
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       );
                     })}
+                  </div>
+
+                  <div className="mt-5 overflow-x-auto">
+                    <table className="min-w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-white/10">
+                          <th className="pb-3 pr-4">Meal</th>
+                          <th className="pb-3 pr-4">Calories</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mealSlotDefinitions.map((slot) => (
+                          <tr key={slot.id} className="border-b border-slate-100 dark:border-white/5">
+                            <td className="py-2 pr-4">{slot.label}</td>
+                            <td className="py-2 pr-4">{plan.meals?.[slot.id]?.calories || 0}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td className="pt-3 pr-4 font-bold">TOTAL</td>
+                          <td className="pt-3 pr-4 font-bold">{plan.summary?.dailyCalories || 0}</td>
+                        </tr>
+                        <tr>
+                          <td className="pt-2 pr-4 text-slate-500 dark:text-white/45">vs Goal</td>
+                          <td className="pt-2 pr-4 text-slate-500 dark:text-white/45">
+                            {Math.abs(delta) <= 75 ? 'On target' : delta > 0 ? `+${delta} over` : `${Math.abs(delta)} under`}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );
@@ -387,6 +672,33 @@ const MealsView = ({
           )}
         </div>
       </section>
+
+      {recipeEntry ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl dark:bg-[#07111f]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="life-card-label">Recipe</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{recipeEntry.title}</h2>
+                <p className="mt-2 text-sm text-slate-500 dark:text-white/55">Cook time: {recipeEntry.cookTime || 'Quick prep'}</p>
+              </div>
+              <button type="button" onClick={() => setRecipeEntry(null)} className="life-secondary-button">Close</button>
+            </div>
+            <div className="mt-6 grid gap-3">
+              {recipeEntry.steps.map((step) => (
+                <div key={step} className="life-soft-card">
+                  <p className="text-sm leading-6 text-slate-700 dark:text-white/75">{step}</p>
+                </div>
+              ))}
+            </div>
+            {recipeEntry.tips ? (
+              <div className="mt-4 rounded-[1.25rem] border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-200">
+                Tip: {recipeEntry.tips}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

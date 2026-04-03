@@ -41,10 +41,17 @@ import {
   getUpcomingFamilyBirthdays,
 } from './life/dashboardData.js';
 import {
+  buildGoalProgress,
+  buildNutritionProgress,
+  buildShoppingList,
+  buildWeeklyMealSummary,
+  calculateCalorieTargets,
   generateMealPlans,
   getMealCompletionSummary,
   getUpcomingMealPlan,
   isMealSlotId,
+  mealSlotDefinitions,
+  swapMealEntry,
 } from './life/meals.js';
 import {
   buildAutoRelationship,
@@ -583,6 +590,11 @@ function App() {
   const upcomingBirthdays = useMemo(() => getUpcomingFamilyBirthdays(dashboard.family.people, 45), [dashboard.family.people]);
   const upcomingMealPlan = useMemo(() => getUpcomingMealPlan(dashboard.meals.generatedPlans), [dashboard.meals.generatedPlans]);
   const upcomingMealSummary = useMemo(() => getMealCompletionSummary(upcomingMealPlan), [upcomingMealPlan]);
+  const mealTargets = useMemo(() => calculateCalorieTargets({
+    meals: dashboard.meals,
+    profile: dashboard.profile,
+    fitness: dashboard.fitness,
+  }), [dashboard.fitness, dashboard.meals, dashboard.profile]);
   const weeklyReview = useMemo(
     () => buildWeeklyReviewData({
       dashboard,
@@ -1071,7 +1083,10 @@ function App() {
       ...current,
       meals: {
         ...current.meals,
-        generatedPlans: generateMealPlans(current.meals, { startDate, days }),
+        generatedPlans: generateMealPlans(current.meals, { startDate, days }, {
+          profile: current.profile,
+          fitness: current.fitness,
+        }),
       },
     }));
   };
@@ -1084,12 +1099,78 @@ function App() {
       options: { startDate, days },
     });
 
+    const targets = calculateCalorieTargets({
+      meals: dashboard.meals,
+      profile: dashboard.profile,
+      fitness: dashboard.fitness,
+    });
+    const enrichedPlans = Array.isArray(response?.generatedPlans)
+      ? response.generatedPlans.map((plan) => {
+        const nextSummary = {
+          maintenanceCalories: targets.maintenanceCalories,
+          goalCalories: targets.goalCalories,
+          proteinTarget: targets.macros.proteinGrams,
+          carbsTarget: targets.macros.carbsGrams,
+          fatTarget: targets.macros.fatGrams,
+          dailyCalories: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.calories || 0), 0),
+          dailyProtein: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.protein || 0), 0),
+          dailyCarbs: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.carbs || 0), 0),
+          dailyFat: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.fat || 0), 0),
+        };
+        nextSummary.deltaVsGoal = Number(nextSummary.dailyCalories || 0) - Number(nextSummary.goalCalories || 0);
+        return {
+          ...plan,
+          summary: nextSummary,
+        };
+      })
+      : null;
+
     updateDashboard((current) => ({
       ...current,
       meals: {
         ...current.meals,
         aiGuidance: Array.isArray(response?.aiGuidance) ? response.aiGuidance : current.meals.aiGuidance,
-        generatedPlans: Array.isArray(response?.generatedPlans) ? response.generatedPlans : current.meals.generatedPlans,
+        generatedPlans: enrichedPlans || current.meals.generatedPlans,
+      },
+    }));
+  };
+
+  const swapPlannedMeal = (planId, slotId) => {
+    updateDashboard((current) => ({
+      ...current,
+      meals: {
+        ...current.meals,
+        generatedPlans: current.meals.generatedPlans.map((plan) => {
+          if (plan.id !== planId) return plan;
+          const swapped = swapMealEntry({
+            mealsState: current.meals,
+            plan,
+            slotId,
+            profile: current.profile,
+            fitness: current.fitness,
+          });
+          if (!swapped) return plan;
+          const nextMeals = {
+            ...plan.meals,
+            [slotId]: {
+              ...swapped,
+              completed: false,
+            },
+          };
+          const nextSummary = {
+            ...plan.summary,
+            dailyCalories: mealSlotDefinitions.reduce((sum, slot) => sum + Number(nextMeals[slot.id]?.calories || 0), 0),
+            dailyProtein: mealSlotDefinitions.reduce((sum, slot) => sum + Number(nextMeals[slot.id]?.protein || 0), 0),
+            dailyCarbs: mealSlotDefinitions.reduce((sum, slot) => sum + Number(nextMeals[slot.id]?.carbs || 0), 0),
+            dailyFat: mealSlotDefinitions.reduce((sum, slot) => sum + Number(nextMeals[slot.id]?.fat || 0), 0),
+          };
+          nextSummary.deltaVsGoal = Number(nextSummary.dailyCalories || 0) - Number(nextSummary.goalCalories || 0);
+          return {
+            ...plan,
+            meals: nextMeals,
+            summary: nextSummary,
+          };
+        }),
       },
     }));
   };
@@ -1484,11 +1565,17 @@ function App() {
         return (
           <MealsView
             meals={dashboard.meals}
+            plannerTargets={mealTargets}
+            weeklySummary={buildWeeklyMealSummary(dashboard.meals.generatedPlans)}
+            shoppingList={buildShoppingList(dashboard.meals.generatedPlans)}
+            goalProgress={buildGoalProgress(dashboard.meals.generatedPlans)}
+            nutritionProgress={buildNutritionProgress(upcomingMealPlan)}
             onUpdateMeals={updateMeals}
             onUpdateMealRule={updateMealRule}
             onGeneratePlans={regenerateMealPlans}
             onGenerateAiPlans={generateAiBackedMealPlans}
             onToggleMealCompleted={toggleMealCompleted}
+            onSwapMeal={swapPlannedMeal}
             onClearGeneratedPlans={clearGeneratedMealPlans}
           />
         );
