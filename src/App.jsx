@@ -1571,7 +1571,6 @@ function App() {
             goalProgress={buildGoalProgress(dashboard.meals.generatedPlans)}
             nutritionProgress={buildNutritionProgress(upcomingMealPlan)}
             onUpdateMeals={updateMeals}
-            onUpdateMealRule={updateMealRule}
             onGeneratePlans={regenerateMealPlans}
             onGenerateAiPlans={generateAiBackedMealPlans}
             onToggleMealCompleted={toggleMealCompleted}

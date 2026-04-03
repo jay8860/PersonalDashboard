@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { mealDatabaseStats } from '../mealDatabase.js';
 import {
   Bot,
   CalendarDays,
@@ -10,7 +11,6 @@ import {
   Replace,
   ShoppingBasket,
   Sparkles,
-  UtensilsCrossed,
 } from 'lucide-react';
 import { formatFriendlyDate } from '../dashboardData.js';
 import {
@@ -34,67 +34,6 @@ const progressPct = (current, target) => {
   if (!target) return 0;
   return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
 };
-
-const MealRuleEditor = ({ slot, rule, onUpdateRule }) => (
-  <section className="life-panel">
-    <div className="flex items-start gap-3">
-      <div className="rounded-2xl bg-emerald-500/12 p-3 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200">
-        <UtensilsCrossed size={18} />
-      </div>
-      <div>
-        <p className="life-card-label">{slot.label} Rules</p>
-        <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-          Fix what must happen and leave room for intelligent rotation.
-        </h2>
-      </div>
-    </div>
-
-    <div className="mt-6 grid gap-4 xl:grid-cols-2">
-      <label className="space-y-2">
-        <span className="life-card-label">Mandatory items</span>
-        <textarea
-          rows={4}
-          value={rule.fixedItems.join('\n')}
-          onChange={(event) => onUpdateRule(slot.id, { fixedItems: parseLines(event.target.value) })}
-          placeholder="3 eggs&#10;Sprouts"
-          className="life-textarea"
-        />
-      </label>
-
-      <label className="space-y-2">
-        <span className="life-card-label">Flexible ingredients</span>
-        <textarea
-          rows={4}
-          value={rule.flexibleItems.join('\n')}
-          onChange={(event) => onUpdateRule(slot.id, { flexibleItems: parseLines(event.target.value) })}
-          placeholder="Paneer&#10;Curd&#10;Poha"
-          className="life-textarea"
-        />
-      </label>
-
-      <label className="space-y-2 xl:col-span-2">
-        <span className="life-card-label">Example dishes</span>
-        <textarea
-          rows={3}
-          value={rule.exampleMeals.join('\n')}
-          onChange={(event) => onUpdateRule(slot.id, { exampleMeals: parseLines(event.target.value) })}
-          placeholder="Egg bhurji with toast&#10;Moong dal chilla"
-          className="life-textarea"
-        />
-      </label>
-
-      <label className="space-y-2 xl:col-span-2">
-        <span className="life-card-label">Special note</span>
-        <input
-          value={rule.note}
-          onChange={(event) => onUpdateRule(slot.id, { note: event.target.value })}
-          placeholder="Keep lunch carb-controlled and protein-heavy."
-          className="life-input"
-        />
-      </label>
-    </div>
-  </section>
-);
 
 const SummaryPill = ({ label, value }) => (
   <div className="rounded-[1.2rem] border border-white/80 bg-white/75 px-4 py-3 dark:border-white/10 dark:bg-white/6">
@@ -123,7 +62,6 @@ const MealsView = ({
   goalProgress,
   nutritionProgress,
   onUpdateMeals,
-  onUpdateMealRule,
   onGeneratePlans,
   onGenerateAiPlans,
   onToggleMealCompleted,
@@ -367,6 +305,14 @@ const MealsView = ({
             {aiError}
           </div>
         ) : null}
+
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <SummaryPill label="Meal Library" value={`${mealDatabaseStats.total} dishes`} />
+          <SummaryPill label="Breakfasts" value={String(mealDatabaseStats.breakfast)} />
+          <SummaryPill label="Lunches" value={String(mealDatabaseStats.lunch)} />
+          <SummaryPill label="Dinners" value={String(mealDatabaseStats.dinner)} />
+          <SummaryPill label="Snack Options" value={String(mealDatabaseStats.snacks)} />
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
@@ -446,17 +392,6 @@ const MealsView = ({
           </div>
         </section>
       ) : null}
-
-      <div className="grid gap-6">
-        {mealSlotDefinitions.map((slot) => (
-          <MealRuleEditor
-            key={slot.id}
-            slot={slot}
-            rule={meals.mealRules[slot.id]}
-            onUpdateRule={onUpdateMealRule}
-          />
-        ))}
-      </div>
 
       <section className="life-panel">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
