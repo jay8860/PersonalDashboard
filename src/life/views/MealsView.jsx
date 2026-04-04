@@ -55,6 +55,13 @@ const sourceBadgeLabels = {
   'library-fallback': 'Library fallback',
 };
 
+const generationModeLabels = {
+  ai: 'AI',
+  'ai-partial': 'AI partial',
+  library: 'Library',
+  mixed: 'AI + fallback',
+};
+
 const NutritionBar = ({ label, current, target }) => (
   <div className="space-y-2">
     <div className="flex items-center justify-between text-sm">
@@ -71,6 +78,7 @@ const MealsView = ({
   meals,
   plannerTargets,
   eligibleMeals,
+  aiGenerationProgress,
   weeklySummary,
   shoppingList,
   goalProgress,
@@ -182,6 +190,9 @@ const MealsView = ({
   const plannerProfile = meals.plannerProfile || {};
   const generationMeta = meals.generationMeta || {};
   const hydrationLiters = ((plannerTargets?.hydrationMl || 0) / 1000).toFixed(1);
+  const aiProgressPct = aiGenerationProgress?.requestedDays
+    ? Math.max(0, Math.min(100, Math.round(((aiGenerationProgress.generatedDays || 0) / aiGenerationProgress.requestedDays) * 100)))
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -377,6 +388,24 @@ const MealsView = ({
             {aiError}
           </div>
         ) : null}
+        {(aiGenerationProgress?.requestedDays || isGeneratingAi) ? (
+          <div className="mt-4 rounded-[1.25rem] border border-violet-200 bg-violet-50 px-4 py-4 dark:border-violet-500/25 dark:bg-violet-500/10">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm font-semibold text-violet-900 dark:text-violet-100">
+                {aiGenerationProgress?.active ? 'AI generation in progress' : 'Latest AI generation'}
+              </p>
+              <p className="text-sm text-violet-700 dark:text-violet-200">
+                {aiGenerationProgress?.generatedDays || 0} / {aiGenerationProgress?.requestedDays || meals.planLengthDays || 0} days
+              </p>
+            </div>
+            <div className="mt-3 h-2.5 rounded-full bg-violet-100 dark:bg-white/10">
+              <div className="h-2.5 rounded-full bg-violet-500 transition-all" style={{ width: `${aiProgressPct}%` }} />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-violet-800 dark:text-violet-200">
+              {aiGenerationProgress?.status || 'Preparing AI batches...'}
+            </p>
+          </div>
+        ) : null}
         {swapFeedback ? (
           <div className="mt-4 rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
             {swapFeedback}
@@ -397,13 +426,13 @@ const MealsView = ({
             AI uses your raw materials first, then prefers eligible meals from the built-in Indian meal library.
           </h3>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryPill label="Mode" value={generationMeta.mode === 'mixed' ? 'AI + fallback' : generationMeta.mode === 'ai' ? 'AI' : 'Library'} />
+            <SummaryPill label="Mode" value={generationModeLabels[generationMeta.mode] || 'Library'} />
             <SummaryPill label="Requested days" value={String(generationMeta.requestedDays || meals.planLengthDays || 0)} />
             <SummaryPill label="AI days" value={String(generationMeta.aiDays || 0)} />
-            <SummaryPill label="Fallback days" value={String(generationMeta.fallbackDays || 0)} />
+            <SummaryPill label="Missing days" value={String(generationMeta.missingDays || 0)} />
           </div>
           <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-white/60">
-            If you press `Generate with AI` and still see mostly `Library` or `Library fallback`, that means Gemini did not return enough usable day plans for your requested range, so the planner filled the rest from the local meal engine using your pantry and eligible library matches.
+            The likely reason AI was only returning a few days before is that the old flow asked Gemini for one very large strict-JSON response for the entire 7, 14, or 30-day plan. Large structured outputs often get truncated or partially malformed, so only the first few valid days survived parsing. The new flow generates smaller AI batches and retries missing dates individually.
           </p>
         </div>
 

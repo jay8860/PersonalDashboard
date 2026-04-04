@@ -26,6 +26,7 @@ import {
   Sun,
   UserRound,
 } from 'lucide-react';
+import { addDays, format, parseISO } from 'date-fns';
 import FinanceDashboard from './finance/FinanceDashboard.jsx';
 import { hasMeaningfulProfileData, loadStoredProfile, replaceStoredProfile } from './finance/utils/storage.js';
 import HealthDashboard from './health/HealthDashboard.jsx';
@@ -87,6 +88,8 @@ const themeKey = 'life-atlas-theme';
 const selfAliases = new Set(['', 'self', 'me', 'myself', 'you', 'person-self']);
 let portalBootstrapPromise = null;
 let portalBootstrapCache = null;
+
+const shiftIsoDate = (isoDate, offsetDays) => format(addDays(parseISO(isoDate), offsetDays), 'yyyy-MM-dd');
 
 const tabItems = [
   { id: 'home', label: 'Home', icon: LayoutDashboard },
@@ -328,6 +331,14 @@ function App() {
   const [dashboard, setDashboard] = useState(() => normalizeDashboard(loadDashboard()));
   const [financeProfile, setFinanceProfile] = useState(() => loadStoredProfile());
   const [portalDocuments, setPortalDocuments] = useState([]);
+  const [aiGenerationProgress, setAiGenerationProgress] = useState({
+    active: false,
+    requestedDays: 0,
+    generatedDays: 0,
+    totalBatches: 0,
+    completedBatches: 0,
+    status: '',
+  });
   const [healthFeed, setHealthFeed] = useState({
     history: [],
     notes: [],
@@ -1107,76 +1118,174 @@ function App() {
   };
 
   const generateAiBackedMealPlans = async ({ startDate, days }) => {
+    const requestedDays = [7, 14, 30].includes(Number(days)) ? Number(days) : Number(dashboard.meals.planLengthDays) || 7;
+    const chunkSize = requestedDays >= 14 ? 3 : 2;
+    const totalBatches = Math.ceil(requestedDays / chunkSize);
     const eligibleMeals = buildEligibleMealCatalog({
       mealsState: dashboard.meals,
       profile: dashboard.profile,
       fitness: dashboard.fitness,
       perSlot: 10,
     });
-
-    const response = await generateAiMealPlan({
-      meals: dashboard.meals,
-      profile: dashboard.profile,
-      fitness: dashboard.fitness,
-      eligibleMeals,
-      options: { startDate, days },
-    });
-
     const targets = calculateCalorieTargets({
       meals: dashboard.meals,
       profile: dashboard.profile,
       fitness: dashboard.fitness,
     });
-    const enrichedPlans = Array.isArray(response?.generatedPlans)
-      ? response.generatedPlans.map((plan) => {
-        const nextSummary = {
-          maintenanceCalories: targets.maintenanceCalories,
-          goalCalories: targets.goalCalories,
-          proteinTarget: targets.macros.proteinGrams,
-          carbsTarget: targets.macros.carbsGrams,
-          fatTarget: targets.macros.fatGrams,
-          dailyCalories: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.calories || 0), 0),
-          dailyProtein: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.protein || 0), 0),
-          dailyCarbs: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.carbs || 0), 0),
-          dailyFat: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.fat || 0), 0),
-        };
-        nextSummary.deltaVsGoal = Number(nextSummary.dailyCalories || 0) - Number(nextSummary.goalCalories || 0);
-        return {
-          ...plan,
-          source: 'ai',
-          summary: nextSummary,
-        };
-      })
-      : null;
-
-    const fallbackPlans = generateMealPlans(dashboard.meals, { startDate, days }, {
-      profile: dashboard.profile,
-      fitness: dashboard.fitness,
+    const enrichPlans = (plans = []) => plans.map((plan) => {
+      const nextSummary = {
+        maintenanceCalories: targets.maintenanceCalories,
+        goalCalories: targets.goalCalories,
+        proteinTarget: targets.macros.proteinGrams,
+        carbsTarget: targets.macros.carbsGrams,
+        fatTarget: targets.macros.fatGrams,
+        dailyCalories: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.calories || 0), 0),
+        dailyProtein: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.protein || 0), 0),
+        dailyCarbs: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.carbs || 0), 0),
+        dailyFat: mealSlotDefinitions.reduce((sum, slot) => sum + Number(plan.meals?.[slot.id]?.fat || 0), 0),
+      };
+      nextSummary.deltaVsGoal = Number(nextSummary.dailyCalories || 0) - Number(nextSummary.goalCalories || 0);
+      return {
+        ...plan,
+        source: 'ai',
+        summary: nextSummary,
+      };
     });
 
-    const mergedPlans = fallbackPlans.map((fallbackPlan) => {
-      const aiPlan = enrichedPlans?.find((plan) => plan.date === fallbackPlan.date);
-      return aiPlan || { ...fallbackPlan, source: 'library-fallback' };
-    });
-    const aiDays = mergedPlans.filter((plan) => plan.source === 'ai').length;
-    const fallbackDays = mergedPlans.length - aiDays;
+    const aggregatedPlans = [];
+    const aggregatedGuidance = [];
+    const seenDates = new Set();
+    let aiReturnedDays = 0;
 
-    updateDashboard((current) => ({
-      ...current,
-      meals: {
-        ...current.meals,
-        aiGuidance: Array.isArray(response?.aiGuidance) ? response.aiGuidance : current.meals.aiGuidance,
-        generationMeta: {
-          mode: aiDays > 0 && fallbackDays > 0 ? 'mixed' : aiDays > 0 ? 'ai' : 'library',
-          requestedDays: Number(days) || Number(current.meals.planLengthDays) || 0,
-          aiDays,
-          fallbackDays,
-          aiReturnedDays: Array.isArray(response?.generatedPlans) ? response.generatedPlans.length : 0,
-          lastRunAt: new Date().toISOString(),
+    setAiGenerationProgress({
+      active: true,
+      requestedDays,
+      generatedDays: 0,
+      totalBatches,
+      completedBatches: 0,
+      status: `Starting AI generation for ${requestedDays} days...`,
+    });
+
+    try {
+      for (let offset = 0; offset < requestedDays; offset += chunkSize) {
+        const chunkDays = Math.min(chunkSize, requestedDays - offset);
+        const chunkStartDate = shiftIsoDate(startDate, offset);
+        const completedBatches = Math.floor(offset / chunkSize);
+
+        setAiGenerationProgress((current) => ({
+          ...current,
+          active: true,
+          completedBatches,
+          status: `Generating AI days ${offset + 1}-${offset + chunkDays} of ${requestedDays}...`,
+        }));
+
+        const response = await generateAiMealPlan({
+          meals: dashboard.meals,
+          profile: dashboard.profile,
+          fitness: dashboard.fitness,
+          eligibleMeals,
+          options: { startDate: chunkStartDate, days: chunkDays },
+        });
+
+        aiReturnedDays += Array.isArray(response?.generatedPlans) ? response.generatedPlans.length : 0;
+        enrichPlans(response?.generatedPlans || []).forEach((plan) => {
+          if (plan.date && !seenDates.has(plan.date)) {
+            seenDates.add(plan.date);
+            aggregatedPlans.push(plan);
+          }
+        });
+        (response?.aiGuidance || []).forEach((item) => {
+          if (item && !aggregatedGuidance.includes(item)) aggregatedGuidance.push(item);
+        });
+
+        const expectedDates = Array.from({ length: chunkDays }, (_, index) => shiftIsoDate(chunkStartDate, index));
+        const missingDates = expectedDates.filter((date) => !seenDates.has(date));
+
+        for (const missingDate of missingDates) {
+          setAiGenerationProgress((current) => ({
+            ...current,
+            active: true,
+            status: `Retrying AI for ${missingDate}...`,
+          }));
+
+          const retryResponse = await generateAiMealPlan({
+            meals: dashboard.meals,
+            profile: dashboard.profile,
+            fitness: dashboard.fitness,
+            eligibleMeals,
+            options: { startDate: missingDate, days: 1 },
+          });
+
+          aiReturnedDays += Array.isArray(retryResponse?.generatedPlans) ? retryResponse.generatedPlans.length : 0;
+          enrichPlans(retryResponse?.generatedPlans || []).forEach((plan) => {
+            if (plan.date && !seenDates.has(plan.date)) {
+              seenDates.add(plan.date);
+              aggregatedPlans.push(plan);
+            }
+          });
+          (retryResponse?.aiGuidance || []).forEach((item) => {
+            if (item && !aggregatedGuidance.includes(item)) aggregatedGuidance.push(item);
+          });
+
+          setAiGenerationProgress((current) => ({
+            ...current,
+            active: true,
+            generatedDays: aggregatedPlans.length,
+          }));
+        }
+
+        setAiGenerationProgress((current) => ({
+          ...current,
+          active: true,
+          generatedDays: aggregatedPlans.length,
+          completedBatches: completedBatches + 1,
+          status: `AI generated ${aggregatedPlans.length} of ${requestedDays} days so far.`,
+        }));
+      }
+
+      const sortedPlans = [...aggregatedPlans].sort((left, right) => String(left.date).localeCompare(String(right.date)));
+      if (!sortedPlans.length) {
+        throw new Error('AI could not generate any complete day plans. This usually happens when one large JSON response gets truncated or partially structured.');
+      }
+
+      updateDashboard((current) => ({
+        ...current,
+        meals: {
+          ...current.meals,
+          aiGuidance: aggregatedGuidance.length ? aggregatedGuidance : current.meals.aiGuidance,
+          generationMeta: {
+            mode: sortedPlans.length < requestedDays ? 'ai-partial' : 'ai',
+            requestedDays,
+            aiDays: sortedPlans.length,
+            fallbackDays: 0,
+            aiReturnedDays,
+            missingDays: Math.max(0, requestedDays - sortedPlans.length),
+            lastRunAt: new Date().toISOString(),
+          },
+          generatedPlans: sortedPlans,
         },
-        generatedPlans: mergedPlans.length ? mergedPlans : current.meals.generatedPlans,
-      },
-    }));
+      }));
+
+      setAiGenerationProgress({
+        active: false,
+        requestedDays,
+        generatedDays: sortedPlans.length,
+        totalBatches,
+        completedBatches: totalBatches,
+        status: sortedPlans.length < requestedDays
+          ? `AI generated ${sortedPlans.length} of ${requestedDays} days. ${requestedDays - sortedPlans.length} days are still missing.`
+          : `AI generated all ${requestedDays} requested days.`,
+      });
+    } catch (error) {
+      setAiGenerationProgress((current) => ({
+        ...current,
+        active: false,
+        status: current.generatedDays
+          ? `AI generated ${current.generatedDays} of ${current.requestedDays} days before stopping.`
+          : 'AI generation stopped before any complete day was returned.',
+      }));
+      throw error;
+    }
   };
 
   const swapPlannedMeal = (planId, slotId) => {
@@ -1618,6 +1727,7 @@ function App() {
             meals={dashboard.meals}
             plannerTargets={mealTargets}
             eligibleMeals={eligibleMealCatalog}
+            aiGenerationProgress={aiGenerationProgress}
             weeklySummary={buildWeeklyMealSummary(dashboard.meals.generatedPlans)}
             shoppingList={buildShoppingList(dashboard.meals.generatedPlans)}
             goalProgress={buildGoalProgress(dashboard.meals.generatedPlans)}

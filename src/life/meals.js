@@ -204,6 +204,7 @@ const createDefaultGenerationMeta = () => ({
   aiDays: 0,
   fallbackDays: 0,
   aiReturnedDays: 0,
+  missingDays: 0,
   lastRunAt: '',
 });
 
@@ -288,11 +289,12 @@ export const normalizeMealsState = (meals = {}) => {
     generationMeta: {
       ...createDefaultGenerationMeta(),
       ...(meals?.generationMeta || {}),
-      mode: ['library', 'ai', 'mixed'].includes(meals?.generationMeta?.mode) ? meals.generationMeta.mode : 'library',
+      mode: ['library', 'ai', 'mixed', 'ai-partial'].includes(meals?.generationMeta?.mode) ? meals.generationMeta.mode : 'library',
       requestedDays: Number(meals?.generationMeta?.requestedDays) || 0,
       aiDays: Number(meals?.generationMeta?.aiDays) || 0,
       fallbackDays: Number(meals?.generationMeta?.fallbackDays) || 0,
       aiReturnedDays: Number(meals?.generationMeta?.aiReturnedDays) || 0,
+      missingDays: Number(meals?.generationMeta?.missingDays) || 0,
       lastRunAt: String(meals?.generationMeta?.lastRunAt || ''),
     },
     mealRules,
