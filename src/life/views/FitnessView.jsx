@@ -340,7 +340,7 @@ const exerciseGuideMap = {
   'Dead bug or plank': {
     howTo: 'For dead bug, lie on your back and extend opposite arm and leg slowly. For plank, hold a straight body on elbows or hands.',
     cue: 'Brace your stomach throughout.',
-    demo: 'core',
+    demo: 'deadbug',
   },
   'Goblet squat': {
     howTo: 'Hold one dumbbell close to your chest, sit hips back and down, then stand up strongly through your feet.',
@@ -410,7 +410,7 @@ const exerciseGuideMap = {
   'Forearm plank': {
     howTo: 'Rest on forearms and toes, keep body straight, and hold.',
     cue: 'Squeeze glutes and keep hips level.',
-    demo: 'core',
+    demo: 'plank',
   },
   'Rear-delt raise on bench': {
     howTo: 'Lean chest onto the bench, raise dumbbells out and slightly back, then lower slowly.',
@@ -500,12 +500,12 @@ const exerciseGuideMap = {
   'Plank': {
     howTo: 'Hold a straight line from shoulders to heels on hands or forearms.',
     cue: 'Brace core and do not let hips sag.',
-    demo: 'core',
+    demo: 'plank',
   },
   'Dead bug': {
     howTo: 'Lie on your back and slowly extend opposite arm and leg while keeping your lower back gently pressed down.',
     cue: 'Slow control matters more than speed.',
-    demo: 'core',
+    demo: 'deadbug',
   },
   'Burpee or squat thrust': {
     howTo: 'Drop hands down, kick feet back, return feet in, and stand or jump lightly.',
@@ -540,7 +540,7 @@ const exerciseGuideMap = {
   'Hollow body hold': {
     howTo: 'Lie on your back, lift shoulders and legs slightly off the floor, and hold a banana-shaped position.',
     cue: 'Keep the lower back gently pressed into the mat.',
-    demo: 'core',
+    demo: 'hollow',
   },
   'Bench-supported hip thrust': {
     howTo: 'Rest your upper back on the bench, drive hips upward, and squeeze the glutes at the top.',
@@ -555,7 +555,7 @@ const exerciseGuideMap = {
   'Bird dog': {
     howTo: 'From hands and knees, reach one arm forward and the opposite leg back, then return and switch.',
     cue: 'Move slowly and keep hips square to the floor.',
-    demo: 'core',
+    demo: 'birddog',
   },
   'Bent-over rear-delt sweep': {
     howTo: 'Hinge slightly at the hips and sweep the dumbbells wide and back to hit the rear shoulders.',
@@ -580,7 +580,7 @@ const exerciseGuideMap = {
   'Side plank': {
     howTo: 'Prop yourself on one forearm and the side of one foot, then hold your body in a straight line.',
     cue: 'Lift the hips and do not let them sag.',
-    demo: 'core',
+    demo: 'sideplank',
   },
   'Reverse snow angel': {
     howTo: 'Lie face down and sweep your arms from overhead toward your hips like making a snow angel.',
@@ -635,143 +635,212 @@ const exerciseGuideMap = {
 };
 
 const StickExerciseDemo = ({ type }) => {
-  const animationClass = {
-    press: 'animate-exercise-press',
-    pushup: 'animate-exercise-pushup',
-    overhead: 'animate-exercise-overhead',
-    dip: 'animate-exercise-dip',
-    core: 'animate-exercise-core',
-    squat: 'animate-exercise-squat',
-    hinge: 'animate-exercise-hinge',
-    row: 'animate-exercise-row',
-    lunge: 'animate-exercise-lunge',
-    bridge: 'animate-exercise-bridge',
-    raise: 'animate-exercise-raise',
-    curl: 'animate-exercise-curl',
-    calf: 'animate-exercise-calf',
-    mountain: 'animate-exercise-mountain',
-    superman: 'animate-exercise-superman',
-    thruster: 'animate-exercise-thruster',
-    stepup: 'animate-exercise-stepup',
-    bicycle: 'animate-exercise-bicycle',
-    burpee: 'animate-exercise-burpee',
-  }[type] || 'animate-exercise-core';
-
-  const figure = (lines, extra = null) => (
+  const softStroke = 'rgba(100,116,139,0.34)';
+  const hardStroke = 'currentColor';
+  const floor = <path d="M18 106H182" stroke="rgba(148,163,184,0.45)" strokeWidth="3" strokeLinecap="round" />;
+  const benchFlat = (
     <>
-      {extra}
-      <g className={`${animationClass} text-slate-600 dark:text-white/80`} stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none">
-        {lines.map((line, index) => (
-          <path key={index} d={line} />
-        ))}
-      </g>
+      <rect x="54" y="72" width="76" height="10" rx="5" className="fill-slate-300 dark:fill-white/16" />
+      <path d="M66 82L60 104M118 82L124 104" stroke="rgba(148,163,184,0.7)" strokeWidth="3" strokeLinecap="round" />
+    </>
+  );
+  const benchIncline = (
+    <>
+      <path d="M60 80L114 62" stroke="rgba(148,163,184,0.8)" strokeWidth="10" strokeLinecap="round" />
+      <path d="M76 75L68 103M106 65L116 103" stroke="rgba(148,163,184,0.7)" strokeWidth="3" strokeLinecap="round" />
+    </>
+  );
+  const stepBlock = <rect x="124" y="74" width="40" height="22" rx="4" className="fill-slate-300 dark:fill-white/16" />;
+  const bars = (
+    <>
+      <rect x="40" y="72" width="10" height="16" rx="4" className="fill-slate-300 dark:fill-white/16" />
+      <rect x="118" y="72" width="10" height="16" rx="4" className="fill-slate-300 dark:fill-white/16" />
     </>
   );
 
-  const frames = {
-    press: figure(
-      ['M30 14a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 20L35 33', 'M35 23L27 18', 'M35 23L43 18', 'M35 33L30 46', 'M35 33L40 46'],
-      <>
-        <rect x="12" y="30" width="46" height="7" rx="3.5" className="fill-slate-200 dark:fill-white/12" />
-        <path d="M18 18L27 18M43 18L52 18" className="stroke-slate-400 dark:stroke-white/45" strokeWidth="3" strokeLinecap="round" />
-      </>,
-    ),
-    pushup: figure(
-      ['M20 18a4 4 0 1 1 8 0a4 4 0 1 1 -8 0', 'M25 22L36 25L48 27', 'M36 25L33 36', 'M48 27L53 37', 'M33 36L24 39', 'M53 37L60 39'],
-      <path d="M14 40H62" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    overhead: figure(
-      ['M30 12a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 18L35 32', 'M35 21L28 9', 'M35 21L42 9', 'M35 32L30 46', 'M35 32L40 46'],
-      <path d="M24 7H32M38 7H46" className="stroke-slate-400 dark:stroke-white/45" strokeWidth="3" strokeLinecap="round" />,
-    ),
-    dip: figure(
-      ['M27 14a4 4 0 1 1 8 0a4 4 0 1 1 -8 0', 'M31 18L31 30', 'M31 22L21 28', 'M31 22L42 24', 'M31 30L24 42', 'M31 30L39 41'],
-      <>
-        <rect x="15" y="24" width="10" height="4" rx="2" className="fill-slate-300 dark:fill-white/18" />
-        <rect x="40" y="24" width="10" height="4" rx="2" className="fill-slate-300 dark:fill-white/18" />
-      </>,
-    ),
-    core: figure(
-      ['M18 27a4 4 0 1 1 8 0a4 4 0 1 1 -8 0', 'M25 28L38 28', 'M38 28L49 22', 'M38 28L49 34', 'M30 28L20 21', 'M30 28L20 35'],
-      <path d="M10 40H62" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    squat: figure(
-      ['M30 12a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 18L35 29', 'M35 22L27 24', 'M35 22L43 24', 'M35 29L28 37', 'M35 29L43 37', 'M28 37L22 44', 'M43 37L49 44'],
-      <path d="M16 46H54" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    hinge: figure(
-      ['M29 13a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M34 18L40 28', 'M40 28L46 37', 'M39 24L29 28', 'M40 28L50 26', 'M46 37L40 45', 'M46 37L53 44'],
-      <path d="M22 46H56" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    row: figure(
-      ['M20 14a4 4 0 1 1 8 0a4 4 0 1 1 -8 0', 'M24 18L33 25L45 27', 'M33 25L30 37', 'M45 27L52 38', 'M30 37L23 44', 'M52 38L58 44'],
-      <>
-        <rect x="10" y="17" width="18" height="4" rx="2" className="fill-slate-300 dark:fill-white/16" />
-        <path d="M45 27L55 23" className="stroke-slate-400 dark:stroke-white/45" strokeWidth="3" strokeLinecap="round" />
-      </>,
-    ),
-    lunge: figure(
-      ['M31 12a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M36 18L36 29', 'M36 22L29 25', 'M36 22L44 24', 'M36 29L29 38', 'M36 29L45 31', 'M29 38L22 45', 'M45 31L51 44'],
-      <path d="M16 46H56" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    bridge: figure(
-      ['M18 29a4 4 0 1 1 8 0a4 4 0 1 1 -8 0', 'M25 30L36 25L47 28', 'M47 28L54 21', 'M47 28L56 36', 'M31 26L22 20'],
-      <path d="M10 38H62" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    raise: figure(
-      ['M30 12a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 18L35 32', 'M35 22L25 16', 'M35 22L45 16', 'M35 32L30 46', 'M35 32L40 46'],
-      <>
-        <circle cx="23" cy="15" r="2" className="fill-slate-400 dark:fill-white/45" />
-        <circle cx="47" cy="15" r="2" className="fill-slate-400 dark:fill-white/45" />
-      </>,
-    ),
-    curl: figure(
-      ['M30 12a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 18L35 32', 'M35 22L28 18', 'M35 22L42 18', 'M35 32L30 46', 'M35 32L40 46'],
-      <>
-        <path d="M28 18Q24 13 26 8" className="stroke-slate-400 dark:stroke-white/45" strokeWidth="3" strokeLinecap="round" />
-        <path d="M42 18Q46 13 44 8" className="stroke-slate-400 dark:stroke-white/45" strokeWidth="3" strokeLinecap="round" />
-      </>,
-    ),
-    calf: figure(
-      ['M30 12a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 18L35 32', 'M35 22L28 24', 'M35 22L42 24', 'M35 32L32 44', 'M35 32L42 44'],
-      <path d="M22 46H54" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    mountain: figure(
-      ['M20 18a4 4 0 1 1 8 0a4 4 0 1 1 -8 0', 'M25 22L36 25L48 27', 'M36 25L31 36', 'M48 27L54 31', 'M31 36L23 41', 'M54 31L49 43'],
-      <path d="M14 44H62" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    superman: figure(
-      ['M17 23a4 4 0 1 1 8 0a4 4 0 1 1 -8 0', 'M25 24L38 25L51 23', 'M38 25L49 31', 'M38 25L49 19', 'M30 24L19 30', 'M30 24L19 18'],
-      <path d="M10 38H62" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    thruster: figure(
-      ['M30 12a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 18L35 30', 'M35 21L28 11', 'M35 21L42 11', 'M35 30L29 38', 'M35 30L41 38', 'M29 38L24 45', 'M41 38L46 45'],
-      <>
-        <circle cx="27" cy="10" r="2" className="fill-slate-400 dark:fill-white/45" />
-        <circle cx="43" cy="10" r="2" className="fill-slate-400 dark:fill-white/45" />
-      </>,
-    ),
-    stepup: figure(
-      ['M30 12a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 18L35 30', 'M35 22L28 24', 'M35 22L42 24', 'M35 30L28 39', 'M35 30L43 33', 'M28 39L22 45', 'M43 33L49 45'],
-      <rect x="42" y="34" width="14" height="10" rx="2" className="fill-slate-300 dark:fill-white/16" />,
-    ),
-    bicycle: figure(
-      ['M18 27a4 4 0 1 1 8 0a4 4 0 1 1 -8 0', 'M25 28L36 28', 'M36 28L48 23', 'M36 28L48 34', 'M30 28L19 22', 'M30 28L18 34'],
-      <path d="M10 39H62" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />,
-    ),
-    burpee: figure(
-      ['M30 10a5 5 0 1 1 10 0a5 5 0 1 1 -10 0', 'M35 16L35 28', 'M35 20L28 24', 'M35 20L42 24', 'M35 28L29 38', 'M35 28L42 38', 'M29 38L24 45', 'M42 38L48 45'],
-      <>
-        <path d="M48 10L54 4M54 4L58 10" className="stroke-slate-400 dark:stroke-white/45" strokeWidth="2.5" strokeLinecap="round" />
-        <path d="M16 46H56" className="stroke-slate-300 dark:stroke-white/15" strokeWidth="2" />
-      </>,
-    ),
+  const drawDumbbell = (x, y, rotate = 0, dim = false) => (
+    <g transform={`translate(${x} ${y}) rotate(${rotate})`} opacity={dim ? 0.45 : 1}>
+      <rect x="-8" y="-2" width="16" height="4" rx="2" className="fill-slate-500 dark:fill-white/55" />
+      <rect x="-12" y="-4.5" width="4" height="9" rx="2" className="fill-slate-500 dark:fill-white/55" />
+      <rect x="8" y="-4.5" width="4" height="9" rx="2" className="fill-slate-500 dark:fill-white/55" />
+    </g>
+  );
+
+  const drawArrow = (x1, y1, x2, y2) => (
+    <g stroke="rgba(59,130,246,0.9)" strokeWidth="2.4" strokeLinecap="round" fill="none">
+      <path d={`M${x1} ${y1} Q ${(x1 + x2) / 2} ${Math.min(y1, y2) - 10} ${x2} ${y2}`} strokeDasharray="5 5">
+        <animate attributeName="stroke-dashoffset" values="20;0" dur="1.2s" repeatCount="indefinite" />
+      </path>
+      <path d={`M${x2 - 4} ${y2 - 5}L${x2} ${y2}L${x2 - 6} ${y2 + 2}`} />
+    </g>
+  );
+
+  const drawPose = (pose, { ghost = false, dumbbells = [] } = {}) => {
+    const opacity = ghost ? 0.28 : 1;
+    const stroke = ghost ? softStroke : hardStroke;
+    return (
+      <g opacity={opacity} stroke={stroke} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none">
+        <circle cx={pose.head[0]} cy={pose.head[1]} r="8" />
+        <path d={`M${pose.neck[0]} ${pose.neck[1]}L${pose.hip[0]} ${pose.hip[1]}`} />
+        <path d={`M${pose.neck[0]} ${pose.neck[1]}L${pose.elbowL[0]} ${pose.elbowL[1]}L${pose.handL[0]} ${pose.handL[1]}`} />
+        <path d={`M${pose.neck[0]} ${pose.neck[1]}L${pose.elbowR[0]} ${pose.elbowR[1]}L${pose.handR[0]} ${pose.handR[1]}`} />
+        <path d={`M${pose.hip[0]} ${pose.hip[1]}L${pose.kneeL[0]} ${pose.kneeL[1]}L${pose.footL[0]} ${pose.footL[1]}`} />
+        <path d={`M${pose.hip[0]} ${pose.hip[1]}L${pose.kneeR[0]} ${pose.kneeR[1]}L${pose.footR[0]} ${pose.footR[1]}`} />
+        {dumbbells.includes('left') ? drawDumbbell(pose.handL[0], pose.handL[1], pose.dbRotateL || 0, ghost) : null}
+        {dumbbells.includes('right') ? drawDumbbell(pose.handR[0], pose.handR[1], pose.dbRotateR || 0, ghost) : null}
+      </g>
+    );
+  };
+
+  const makeScene = ({ setup, start, end, dumbbells = [] }) => (
+    <>
+      {setup}
+      {drawPose(end, { ghost: true, dumbbells })}
+      <g>
+        <animate attributeName="opacity" values="1;1;0;0;1" dur="1.8s" repeatCount="indefinite" />
+        {drawPose(start, { dumbbells })}
+      </g>
+      <g opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0" dur="1.8s" repeatCount="indefinite" />
+        {drawPose(end, { dumbbells })}
+      </g>
+      {drawArrow(start.handL[0], start.handL[1], end.handL[0], end.handL[1])}
+      {drawArrow(start.handR[0], start.handR[1], end.handR[0], end.handR[1])}
+    </>
+  );
+
+  const scenes = {
+    press: makeScene({
+      setup: <>{floor}{benchIncline}</>,
+      dumbbells: ['left', 'right'],
+      start: { head: [64, 57], neck: [72, 64], hip: [103, 76], elbowL: [82, 56], handL: [92, 48], elbowR: [82, 70], handR: [92, 82], kneeL: [126, 82], footL: [150, 92], kneeR: [126, 82], footR: [152, 102], dbRotateL: 8, dbRotateR: 8 },
+      end: { head: [64, 57], neck: [72, 64], hip: [103, 76], elbowL: [78, 46], handL: [84, 28], elbowR: [92, 68], handR: [98, 50], kneeL: [126, 82], footL: [150, 92], kneeR: [126, 82], footR: [152, 102], dbRotateL: 90, dbRotateR: 90 },
+    }),
+    overhead: makeScene({
+      setup: floor,
+      dumbbells: ['left', 'right'],
+      start: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [84, 38], handL: [78, 48], elbowR: [116, 38], handR: [122, 48], kneeL: [92, 82], footL: [86, 104], kneeR: [108, 82], footR: [114, 104], dbRotateL: 90, dbRotateR: 90 },
+      end: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [90, 20], handL: [90, 8], elbowR: [110, 20], handR: [110, 8], kneeL: [92, 82], footL: [86, 104], kneeR: [108, 82], footR: [114, 104], dbRotateL: 0, dbRotateR: 0 },
+    }),
+    pushup: makeScene({
+      setup: floor,
+      start: { head: [50, 50], neck: [58, 56], hip: [100, 60], elbowL: [66, 62], handL: [68, 82], elbowR: [66, 62], handR: [68, 82], kneeL: [132, 68], footL: [160, 86], kneeR: [132, 68], footR: [160, 86] },
+      end: { head: [56, 38], neck: [66, 44], hip: [106, 48], elbowL: [74, 50], handL: [72, 82], elbowR: [74, 50], handR: [72, 82], kneeL: [136, 54], footL: [162, 86], kneeR: [136, 54], footR: [162, 86] },
+    }),
+    dip: makeScene({
+      setup: <>{floor}{bars}</>,
+      start: { head: [86, 42], neck: [86, 50], hip: [86, 72], elbowL: [62, 62], handL: [44, 78], elbowR: [110, 62], handR: [124, 78], kneeL: [98, 86], footL: [116, 104], kneeR: [98, 86], footR: [118, 104] },
+      end: { head: [86, 54], neck: [86, 62], hip: [86, 80], elbowL: [64, 74], handL: [44, 78], elbowR: [108, 74], handR: [124, 78], kneeL: [100, 92], footL: [118, 104], kneeR: [100, 92], footR: [120, 104] },
+    }),
+    plank: makeScene({
+      setup: floor,
+      start: { head: [56, 48], neck: [66, 54], hip: [108, 58], elbowL: [72, 60], handL: [74, 78], elbowR: [72, 60], handR: [74, 78], kneeL: [136, 64], footL: [162, 82], kneeR: [136, 64], footR: [162, 82] },
+      end: { head: [56, 48], neck: [66, 54], hip: [108, 56], elbowL: [72, 60], handL: [74, 78], elbowR: [72, 60], handR: [74, 78], kneeL: [136, 62], footL: [162, 82], kneeR: [136, 62], footR: [162, 82] },
+    }),
+    deadbug: makeScene({
+      setup: floor,
+      start: { head: [48, 78], neck: [58, 78], hip: [100, 78], elbowL: [46, 62], handL: [36, 48], elbowR: [66, 72], handR: [78, 78], kneeL: [118, 66], footL: [138, 52], kneeR: [120, 88], footR: [144, 98] },
+      end: { head: [48, 78], neck: [58, 78], hip: [100, 78], elbowL: [48, 76], handL: [32, 78], elbowR: [72, 56], handR: [90, 40], kneeL: [118, 90], footL: [138, 100], kneeR: [122, 66], footR: [150, 52] },
+    }),
+    hollow: makeScene({
+      setup: floor,
+      start: { head: [48, 76], neck: [58, 76], hip: [98, 80], elbowL: [42, 64], handL: [30, 54], elbowR: [42, 64], handR: [30, 54], kneeL: [126, 70], footL: [152, 58], kneeR: [126, 70], footR: [152, 58] },
+      end: { head: [48, 74], neck: [58, 74], hip: [98, 78], elbowL: [44, 60], handL: [30, 46], elbowR: [44, 60], handR: [30, 46], kneeL: [128, 66], footL: [156, 50], kneeR: [128, 66], footR: [156, 50] },
+    }),
+    birddog: makeScene({
+      setup: floor,
+      start: { head: [74, 50], neck: [82, 58], hip: [114, 66], elbowL: [70, 72], handL: [56, 84], elbowR: [96, 56], handR: [112, 48], kneeL: [116, 82], footL: [106, 98], kneeR: [136, 62], footR: [154, 54] },
+      end: { head: [74, 50], neck: [82, 58], hip: [114, 66], elbowL: [68, 58], handL: [50, 48], elbowR: [96, 72], handR: [112, 84], kneeL: [116, 62], footL: [98, 50], kneeR: [136, 82], footR: [148, 98] },
+    }),
+    sideplank: makeScene({
+      setup: floor,
+      start: { head: [64, 70], neck: [72, 70], hip: [108, 70], elbowL: [72, 80], handL: [64, 96], elbowR: [88, 56], handR: [98, 42], kneeL: [138, 70], footL: [162, 70], kneeR: [138, 70], footR: [162, 70] },
+      end: { head: [64, 66], neck: [72, 66], hip: [108, 66], elbowL: [72, 80], handL: [64, 96], elbowR: [88, 52], handR: [100, 36], kneeL: [138, 66], footL: [162, 66], kneeR: [138, 66], footR: [162, 66] },
+    }),
+    squat: makeScene({
+      setup: floor,
+      dumbbells: ['left', 'right'],
+      start: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [90, 44], handL: [82, 60], elbowR: [110, 44], handR: [118, 60], kneeL: [92, 82], footL: [86, 104], kneeR: [108, 82], footR: [114, 104], dbRotateL: 90, dbRotateR: 90 },
+      end: { head: [100, 34], neck: [100, 42], hip: [100, 68], elbowL: [90, 46], handL: [82, 60], elbowR: [110, 46], handR: [118, 60], kneeL: [82, 86], footL: [74, 104], kneeR: [118, 86], footR: [126, 104], dbRotateL: 90, dbRotateR: 90 },
+    }),
+    hinge: makeScene({
+      setup: floor,
+      dumbbells: ['left', 'right'],
+      start: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [90, 46], handL: [86, 66], elbowR: [110, 46], handR: [114, 66], kneeL: [92, 82], footL: [84, 104], kneeR: [108, 82], footR: [116, 104], dbRotateL: 0, dbRotateR: 0 },
+      end: { head: [108, 38], neck: [114, 46], hip: [100, 62], elbowL: [106, 58], handL: [104, 76], elbowR: [122, 56], handR: [126, 76], kneeL: [96, 84], footL: [86, 104], kneeR: [110, 84], footR: [120, 104], dbRotateL: 0, dbRotateR: 0 },
+    }),
+    row: makeScene({
+      setup: <>{floor}{benchFlat}</>,
+      dumbbells: ['right'],
+      start: { head: [60, 52], neck: [72, 58], hip: [104, 72], elbowL: [64, 66], handL: [54, 80], elbowR: [116, 68], handR: [126, 84], kneeL: [136, 76], footL: [156, 90], kneeR: [136, 76], footR: [154, 100], dbRotateR: 90 },
+      end: { head: [60, 52], neck: [72, 58], hip: [104, 72], elbowL: [64, 66], handL: [54, 80], elbowR: [102, 60], handR: [112, 52], kneeL: [136, 76], footL: [156, 90], kneeR: [136, 76], footR: [154, 100], dbRotateR: 25 },
+    }),
+    lunge: makeScene({
+      setup: floor,
+      dumbbells: ['left', 'right'],
+      start: { head: [96, 24], neck: [96, 32], hip: [96, 58], elbowL: [84, 42], handL: [78, 60], elbowR: [108, 42], handR: [114, 60], kneeL: [82, 82], footL: [74, 104], kneeR: [122, 72], footR: [136, 104], dbRotateL: 90, dbRotateR: 90 },
+      end: { head: [98, 30], neck: [98, 38], hip: [98, 64], elbowL: [86, 46], handL: [80, 64], elbowR: [110, 46], handR: [116, 64], kneeL: [82, 86], footL: [72, 104], kneeR: [128, 82], footR: [148, 102], dbRotateL: 90, dbRotateR: 90 },
+    }),
+    bridge: makeScene({
+      setup: floor,
+      start: { head: [54, 82], neck: [64, 82], hip: [108, 84], elbowL: [52, 88], handL: [44, 98], elbowR: [52, 88], handR: [44, 98], kneeL: [132, 74], footL: [154, 100], kneeR: [132, 74], footR: [154, 100] },
+      end: { head: [54, 82], neck: [64, 82], hip: [108, 62], elbowL: [52, 88], handL: [44, 98], elbowR: [52, 88], handR: [44, 98], kneeL: [132, 72], footL: [154, 100], kneeR: [132, 72], footR: [154, 100] },
+    }),
+    raise: makeScene({
+      setup: floor,
+      dumbbells: ['left', 'right'],
+      start: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [90, 44], handL: [82, 60], elbowR: [110, 44], handR: [118, 60], kneeL: [92, 82], footL: [86, 104], kneeR: [108, 82], footR: [114, 104], dbRotateL: 90, dbRotateR: 90 },
+      end: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [82, 32], handL: [66, 34], elbowR: [118, 32], handR: [134, 34], kneeL: [92, 82], footL: [86, 104], kneeR: [108, 82], footR: [114, 104], dbRotateL: 0, dbRotateR: 0 },
+    }),
+    curl: makeScene({
+      setup: floor,
+      dumbbells: ['left', 'right'],
+      start: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [90, 44], handL: [84, 68], elbowR: [110, 44], handR: [116, 68], kneeL: [92, 82], footL: [86, 104], kneeR: [108, 82], footR: [114, 104], dbRotateL: 90, dbRotateR: 90 },
+      end: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [90, 44], handL: [84, 42], elbowR: [110, 44], handR: [116, 42], kneeL: [92, 82], footL: [86, 104], kneeR: [108, 82], footR: [114, 104], dbRotateL: 0, dbRotateR: 0 },
+    }),
+    calf: makeScene({
+      setup: floor,
+      start: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [90, 44], handL: [84, 60], elbowR: [110, 44], handR: [116, 60], kneeL: [92, 82], footL: [84, 104], kneeR: [108, 82], footR: [116, 104] },
+      end: { head: [100, 20], neck: [100, 28], hip: [100, 54], elbowL: [90, 40], handL: [84, 56], elbowR: [110, 40], handR: [116, 56], kneeL: [92, 78], footL: [88, 104], kneeR: [108, 78], footR: [120, 104] },
+    }),
+    mountain: makeScene({
+      setup: floor,
+      start: { head: [58, 44], neck: [68, 50], hip: [110, 56], elbowL: [72, 62], handL: [72, 84], elbowR: [72, 62], handR: [72, 84], kneeL: [128, 64], footL: [140, 82], kneeR: [128, 70], footR: [156, 86] },
+      end: { head: [58, 44], neck: [68, 50], hip: [110, 56], elbowL: [72, 62], handL: [72, 84], elbowR: [72, 62], handR: [72, 84], kneeL: [108, 70], footL: [94, 88], kneeR: [132, 66], footR: [156, 86] },
+    }),
+    superman: makeScene({
+      setup: floor,
+      start: { head: [54, 82], neck: [64, 82], hip: [104, 82], elbowL: [50, 82], handL: [36, 82], elbowR: [50, 82], handR: [36, 82], kneeL: [130, 82], footL: [152, 82], kneeR: [130, 82], footR: [152, 82] },
+      end: { head: [54, 74], neck: [64, 74], hip: [104, 74], elbowL: [48, 66], handL: [34, 58], elbowR: [48, 66], handR: [34, 58], kneeL: [132, 68], footL: [156, 60], kneeR: [132, 68], footR: [156, 60] },
+    }),
+    thruster: makeScene({
+      setup: floor,
+      dumbbells: ['left', 'right'],
+      start: { head: [100, 34], neck: [100, 42], hip: [100, 68], elbowL: [88, 48], handL: [80, 62], elbowR: [112, 48], handR: [120, 62], kneeL: [84, 86], footL: [76, 104], kneeR: [116, 86], footR: [124, 104], dbRotateL: 90, dbRotateR: 90 },
+      end: { head: [100, 24], neck: [100, 32], hip: [100, 58], elbowL: [90, 20], handL: [90, 8], elbowR: [110, 20], handR: [110, 8], kneeL: [92, 82], footL: [86, 104], kneeR: [108, 82], footR: [114, 104], dbRotateL: 0, dbRotateR: 0 },
+    }),
+    stepup: makeScene({
+      setup: <>{floor}{stepBlock}</>,
+      dumbbells: ['left', 'right'],
+      start: { head: [88, 24], neck: [88, 32], hip: [88, 58], elbowL: [78, 44], handL: [72, 62], elbowR: [98, 44], handR: [104, 62], kneeL: [82, 82], footL: [78, 104], kneeR: [104, 72], footR: [136, 74], dbRotateL: 90, dbRotateR: 90 },
+      end: { head: [110, 18], neck: [110, 26], hip: [110, 52], elbowL: [100, 38], handL: [94, 56], elbowR: [120, 38], handR: [126, 56], kneeL: [104, 76], footL: [136, 76], kneeR: [122, 74], footR: [146, 76], dbRotateL: 90, dbRotateR: 90 },
+    }),
+    bicycle: makeScene({
+      setup: floor,
+      start: { head: [50, 78], neck: [58, 76], hip: [102, 78], elbowL: [54, 64], handL: [66, 54], elbowR: [62, 78], handR: [76, 78], kneeL: [120, 66], footL: [146, 52], kneeR: [120, 88], footR: [150, 98] },
+      end: { head: [50, 78], neck: [58, 76], hip: [102, 78], elbowL: [54, 78], handL: [66, 78], elbowR: [62, 64], handR: [76, 54], kneeL: [120, 88], footL: [146, 98], kneeR: [120, 66], footR: [150, 52] },
+    }),
+    burpee: makeScene({
+      setup: floor,
+      start: { head: [82, 32], neck: [82, 40], hip: [82, 62], elbowL: [72, 48], handL: [66, 64], elbowR: [92, 48], handR: [98, 64], kneeL: [72, 82], footL: [58, 102], kneeR: [92, 82], footR: [108, 102] },
+      end: { head: [56, 46], neck: [66, 52], hip: [108, 56], elbowL: [72, 64], handL: [72, 86], elbowR: [72, 64], handR: [72, 86], kneeL: [132, 62], footL: [148, 80], kneeR: [132, 68], footR: [160, 86] },
+    }),
   };
 
   return (
     <div className="mt-3 inline-flex items-center rounded-[1rem] border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-black/40">
-      <svg width="96" height="64" viewBox="0 0 72 56" fill="none" aria-hidden="true">
-        {frames[type] || frames.core}
+      <svg width="176" height="112" viewBox="0 0 200 112" fill="none" aria-hidden="true" className="text-slate-700 dark:text-white">
+        {scenes[type] || scenes.plank}
       </svg>
     </div>
   );
