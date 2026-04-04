@@ -43,6 +43,18 @@ const SummaryPill = ({ label, value }) => (
   </div>
 );
 
+const sourceBadgeStyles = {
+  ai: 'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-200',
+  library: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
+  'library-fallback': 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200',
+};
+
+const sourceBadgeLabels = {
+  ai: 'AI day',
+  library: 'Library day',
+  'library-fallback': 'Library fallback',
+};
+
 const NutritionBar = ({ label, current, target }) => (
   <div className="space-y-2">
     <div className="flex items-center justify-between text-sm">
@@ -58,6 +70,7 @@ const NutritionBar = ({ label, current, target }) => (
 const MealsView = ({
   meals,
   plannerTargets,
+  eligibleMeals,
   weeklySummary,
   shoppingList,
   goalProgress,
@@ -74,6 +87,7 @@ const MealsView = ({
   const [selectedPlanIds, setSelectedPlanIds] = useState([]);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [swapFeedback, setSwapFeedback] = useState('');
   const [recipeEntry, setRecipeEntry] = useState(null);
   const upcomingPlan = useMemo(() => getUpcomingMealPlan(meals.generatedPlans), [meals.generatedPlans]);
   const upcomingSummary = getMealCompletionSummary(upcomingPlan);
@@ -153,6 +167,16 @@ const MealsView = ({
     } finally {
       setIsGeneratingAi(false);
     }
+  };
+
+  const handleSwapMeal = (planId, slotId) => {
+    const swapped = onSwapMeal(planId, slotId);
+    if (swapped) {
+      setSwapFeedback('');
+      return;
+    }
+    setSwapFeedback('No suitable swap was found inside your current ingredient set and calorie band. Add more ingredients or regenerate for fresh options.');
+    window.setTimeout(() => setSwapFeedback(''), 2800);
   };
 
   const plannerProfile = meals.plannerProfile || {};
@@ -352,6 +376,11 @@ const MealsView = ({
             {aiError}
           </div>
         ) : null}
+        {swapFeedback ? (
+          <div className="mt-4 rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
+            {swapFeedback}
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <SummaryPill label="Meal Library" value={`${mealDatabaseStats.total} dishes`} />
@@ -359,6 +388,36 @@ const MealsView = ({
           <SummaryPill label="Lunches" value={String(mealDatabaseStats.lunch)} />
           <SummaryPill label="Dinners" value={String(mealDatabaseStats.dinner)} />
           <SummaryPill label="Snack Options" value={String(mealDatabaseStats.snacks)} />
+        </div>
+
+        <div className="mt-6 rounded-[1.5rem] border border-sky-100 bg-sky-50/80 p-4 dark:border-sky-500/15 dark:bg-sky-500/10">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="life-card-label">Eligible meals unlocked right now</p>
+              <h3 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                These are the current library options your pantry can actually unlock.
+              </h3>
+            </div>
+            <p className="max-w-2xl text-sm leading-6 text-slate-600 dark:text-white/60">
+              If these counts are low, the planner will repeat more often or fall back to pantry-built meals.
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              ['Breakfast', eligibleMeals?.breakfast || []],
+              ['Lunch', eligibleMeals?.lunch || []],
+              ['Dinner', eligibleMeals?.dinner || []],
+              ['Snacks', [...(eligibleMeals?.snack1 || []), ...(eligibleMeals?.snack2 || [])]],
+            ].map(([label, items]) => (
+              <div key={label} className="rounded-[1.2rem] border border-white/80 bg-white/85 p-4 dark:border-white/10 dark:bg-white/5">
+                <p className="life-card-label">{label}</p>
+                <p className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{items.length}</p>
+                <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-white/60">
+                  {items.slice(0, 3).map((item) => item.dishName).join(', ') || 'No strong matches yet'}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -457,6 +516,7 @@ const MealsView = ({
             <thead>
               <tr className="border-b border-slate-200 dark:border-white/10">
                 <th className="pb-3 pr-4">Day</th>
+                <th className="pb-3 pr-4">Source</th>
                 <th className="pb-3 pr-4">Breakfast</th>
                 <th className="pb-3 pr-4">Lunch</th>
                 <th className="pb-3 pr-4">Dinner</th>
@@ -467,6 +527,11 @@ const MealsView = ({
               {weeklySummary?.rows?.map((row) => (
                 <tr key={row.date} className="border-b border-slate-100 dark:border-white/5">
                   <td className="py-3 pr-4">{formatFriendlyDate(row.date)}</td>
+                  <td className="py-3 pr-4">
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${sourceBadgeStyles[row.source || 'library'] || sourceBadgeStyles.library}`}>
+                      {sourceBadgeLabels[row.source || 'library'] || sourceBadgeLabels.library}
+                    </span>
+                  </td>
                   <td className="py-3 pr-4">{row.breakfast}</td>
                   <td className="py-3 pr-4">{row.lunch}</td>
                   <td className="py-3 pr-4">{row.dinner}</td>
@@ -475,6 +540,7 @@ const MealsView = ({
               ))}
               <tr>
                 <td className="pt-4 font-bold">Avg</td>
+                <td className="pt-4" />
                 <td className="pt-4" />
                 <td className="pt-4" />
                 <td className="pt-4" />
@@ -567,9 +633,14 @@ const MealsView = ({
                       </label>
                       <div>
                       <p className="life-card-label">Day plan</p>
-                      <h3 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
-                        {formatFriendlyDate(plan.date)}
-                      </h3>
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <h3 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                          {formatFriendlyDate(plan.date)}
+                        </h3>
+                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${sourceBadgeStyles[plan.source || 'library'] || sourceBadgeStyles.library}`}>
+                          {sourceBadgeLabels[plan.source || 'library'] || sourceBadgeLabels.library}
+                        </span>
+                      </div>
                       <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
                         {summary.completed}/{summary.total} meals completed
                       </p>
@@ -615,6 +686,16 @@ const MealsView = ({
                               <p className="mt-2 text-sm text-slate-500 dark:text-white/55">
                                 Calories: {entry?.calories || 0} kcal | Protein: {entry?.protein || 0} g | Carbs: {entry?.carbs || 0} g | Fat: {entry?.fat || 0} g
                               </p>
+                              {entry?.estimatedNutrition ? (
+                                <p className="mt-2 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">
+                                  Estimated nutrition
+                                </p>
+                              ) : null}
+                              {entry?.chosenReason ? (
+                                <p className="mt-2 text-xs leading-5 text-sky-700 dark:text-sky-200">
+                                  Why this meal was chosen: {entry.chosenReason}
+                                </p>
+                              ) : null}
                               {entry?.prepNote ? (
                                 <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-white/45">Prep: {entry.prepNote}</p>
                               ) : null}
@@ -631,7 +712,7 @@ const MealsView = ({
                           </div>
 
                           <div className="mt-4 flex flex-wrap gap-2">
-                            <button type="button" onClick={() => onSwapMeal(plan.id, slot.id)} className="life-secondary-button px-3 py-2">
+                            <button type="button" onClick={() => handleSwapMeal(plan.id, slot.id)} className="life-secondary-button px-3 py-2">
                               <Replace size={15} />
                               Swap meal
                             </button>

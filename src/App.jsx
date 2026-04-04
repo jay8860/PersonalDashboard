@@ -42,6 +42,7 @@ import {
 } from './life/dashboardData.js';
 import {
   buildGoalProgress,
+  buildEligibleMealCatalog,
   buildNutritionProgress,
   buildShoppingList,
   buildWeeklyMealSummary,
@@ -595,6 +596,12 @@ function App() {
     profile: dashboard.profile,
     fitness: dashboard.fitness,
   }), [dashboard.fitness, dashboard.meals, dashboard.profile]);
+  const eligibleMealCatalog = useMemo(() => buildEligibleMealCatalog({
+    mealsState: dashboard.meals,
+    profile: dashboard.profile,
+    fitness: dashboard.fitness,
+    perSlot: 6,
+  }), [dashboard.fitness, dashboard.meals, dashboard.profile]);
   const weeklyReview = useMemo(
     () => buildWeeklyReviewData({
       dashboard,
@@ -1086,16 +1093,24 @@ function App() {
         generatedPlans: generateMealPlans(current.meals, { startDate, days }, {
           profile: current.profile,
           fitness: current.fitness,
-        }),
+        }).map((plan) => ({ ...plan, source: 'library' })),
       },
     }));
   };
 
   const generateAiBackedMealPlans = async ({ startDate, days }) => {
+    const eligibleMeals = buildEligibleMealCatalog({
+      mealsState: dashboard.meals,
+      profile: dashboard.profile,
+      fitness: dashboard.fitness,
+      perSlot: 10,
+    });
+
     const response = await generateAiMealPlan({
       meals: dashboard.meals,
       profile: dashboard.profile,
       fitness: dashboard.fitness,
+      eligibleMeals,
       options: { startDate, days },
     });
 
@@ -1120,6 +1135,7 @@ function App() {
         nextSummary.deltaVsGoal = Number(nextSummary.dailyCalories || 0) - Number(nextSummary.goalCalories || 0);
         return {
           ...plan,
+          source: 'ai',
           summary: nextSummary,
         };
       })
@@ -1132,7 +1148,7 @@ function App() {
 
     const mergedPlans = fallbackPlans.map((fallbackPlan) => {
       const aiPlan = enrichedPlans?.find((plan) => plan.date === fallbackPlan.date);
-      return aiPlan || fallbackPlan;
+      return aiPlan || { ...fallbackPlan, source: 'library-fallback' };
     });
 
     updateDashboard((current) => ({
@@ -1146,20 +1162,25 @@ function App() {
   };
 
   const swapPlannedMeal = (planId, slotId) => {
+    const targetPlan = dashboard.meals.generatedPlans.find((plan) => plan.id === planId);
+    if (!targetPlan) return false;
+
+    const swapped = swapMealEntry({
+      mealsState: dashboard.meals,
+      plan: targetPlan,
+      slotId,
+      profile: dashboard.profile,
+      fitness: dashboard.fitness,
+    });
+
+    if (!swapped) return false;
+
     updateDashboard((current) => ({
       ...current,
       meals: {
         ...current.meals,
         generatedPlans: current.meals.generatedPlans.map((plan) => {
           if (plan.id !== planId) return plan;
-          const swapped = swapMealEntry({
-            mealsState: current.meals,
-            plan,
-            slotId,
-            profile: current.profile,
-            fitness: current.fitness,
-          });
-          if (!swapped) return plan;
           const nextMeals = {
             ...plan.meals,
             [slotId]: {
@@ -1183,6 +1204,8 @@ function App() {
         }),
       },
     }));
+
+    return true;
   };
 
   const toggleMealCompleted = (planId, slotId) => {
@@ -1576,6 +1599,7 @@ function App() {
           <MealsView
             meals={dashboard.meals}
             plannerTargets={mealTargets}
+            eligibleMeals={eligibleMealCatalog}
             weeklySummary={buildWeeklyMealSummary(dashboard.meals.generatedPlans)}
             shoppingList={buildShoppingList(dashboard.meals.generatedPlans)}
             goalProgress={buildGoalProgress(dashboard.meals.generatedPlans)}

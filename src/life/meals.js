@@ -83,6 +83,65 @@ const goalAdjustments = {
   },
 };
 
+const ingredientFamilies = {
+  paneer: ['paneer', 'tofu'],
+  tofu: ['tofu', 'paneer'],
+  rice: ['rice', 'brown rice', 'brown_rice', 'quinoa', 'millet', 'dalia'],
+  'brown rice': ['brown rice', 'brown_rice', 'rice', 'quinoa', 'millet'],
+  brown_rice: ['brown_rice', 'brown rice', 'rice', 'quinoa', 'millet'],
+  quinoa: ['quinoa', 'rice', 'brown rice', 'brown_rice', 'millet'],
+  millet: ['millet', 'quinoa', 'rice', 'brown rice', 'brown_rice', 'dalia'],
+  atta: ['atta', 'bread', 'multigrain bread', 'whole wheat bread', 'toast'],
+  bread: ['bread', 'multigrain bread', 'whole wheat bread', 'toast', 'atta'],
+  curd: ['curd', 'yogurt', 'greek yogurt', 'milk'],
+  yogurt: ['yogurt', 'curd', 'greek yogurt', 'milk'],
+  milk: ['milk', 'curd', 'yogurt', 'greek yogurt'],
+  sprouts: ['sprouts', 'moong dal', 'chana', 'roasted chana'],
+  'moong dal': ['moong dal', 'sprouts', 'masoor dal', 'chana dal', 'toor dal', 'urad dal'],
+  'urad dal': ['urad dal', 'moong dal', 'toor dal', 'masoor dal'],
+  'toor dal': ['toor dal', 'moong dal', 'masoor dal', 'urad dal', 'chana dal'],
+  'masoor dal': ['masoor dal', 'moong dal', 'toor dal', 'chana dal'],
+  'chana dal': ['chana dal', 'moong dal', 'toor dal', 'masoor dal'],
+  dal: ['dal', 'moong dal', 'toor dal', 'masoor dal', 'urad dal', 'chana dal', 'rajma', 'chole', 'lobia'],
+  rajma: ['rajma', 'chole', 'lobia', 'dal'],
+  chole: ['chole', 'rajma', 'lobia', 'dal'],
+  lobia: ['lobia', 'rajma', 'chole', 'dal'],
+  spinach: ['spinach', 'palak', 'methi', 'cabbage', 'broccoli'],
+  palak: ['palak', 'spinach', 'methi'],
+  banana: ['banana', 'papaya', 'apple', 'orange', 'pomegranate', 'berries'],
+  apple: ['apple', 'banana', 'orange', 'papaya', 'pomegranate', 'berries'],
+  orange: ['orange', 'apple', 'banana', 'papaya', 'pomegranate', 'berries'],
+  almonds: ['almonds', 'walnuts', 'cashews', 'groundnuts', 'peanuts'],
+  walnuts: ['walnuts', 'almonds', 'cashews', 'groundnuts', 'peanuts'],
+  cashews: ['cashews', 'almonds', 'walnuts', 'groundnuts', 'peanuts'],
+};
+
+const proteinIngredientSet = new Set([
+  'eggs', 'paneer', 'tofu', 'soya chunks', 'soy chunks', 'whey protein', 'curd', 'yogurt',
+  'greek yogurt', 'milk', 'sprouts', 'moong dal', 'toor dal', 'masoor dal', 'urad dal',
+  'chana dal', 'rajma', 'chole', 'lobia', 'roasted chana',
+]);
+
+const carbIngredientSet = new Set([
+  'rice', 'brown rice', 'brown_rice', 'atta', 'bread', 'multigrain bread', 'whole wheat bread',
+  'toast', 'poha', 'oats', 'dalia', 'quinoa', 'millet', 'sweet potato', 'potato', 'corn',
+]);
+
+const vegetableIngredientSet = new Set([
+  'spinach', 'palak', 'methi', 'cabbage', 'cauliflower', 'broccoli', 'bottle gourd', 'lauki',
+  'ridge gourd', 'bitter gourd', 'karela', 'peas', 'carrot', 'beetroot', 'tomato', 'onion',
+  'garlic', 'ginger', 'green chili', 'capsicum', 'mushroom', 'bhindi',
+]);
+
+const fruitIngredientSet = new Set([
+  'banana', 'apple', 'orange', 'papaya', 'pomegranate', 'berries', 'lemon',
+]);
+
+const fatIngredientSet = new Set([
+  'almonds', 'walnuts', 'cashews', 'groundnuts', 'peanuts', 'flaxseeds', 'chia seeds',
+  'sunflower seeds', 'sesame seeds', 'ghee', 'olive oil', 'coconut oil', 'butter',
+]);
+
 const normalizeStringList = (values = []) => [...new Set(
   (Array.isArray(values) ? values : [])
     .map((value) => String(value || '').trim())
@@ -119,8 +178,11 @@ const createEmptyMealEntry = (overrides = {}) => ({
   fat: 0,
   prepNote: '',
   note: '',
+  chosenReason: '',
   recipe: null,
   substitutions: [],
+  nutritionSource: 'database',
+  estimatedNutrition: false,
   completed: false,
   ...overrides,
 });
@@ -184,6 +246,7 @@ export const normalizeMealsState = (meals = {}) => {
     .map((plan) => ({
       id: String(plan.id || crypto.randomUUID()),
       date: String(plan.date),
+      source: ['ai', 'library', 'library-fallback'].includes(plan?.source) ? plan.source : 'library',
       summary: plan.summary || null,
       meals: Object.fromEntries(
         mealSlotDefinitions.map((slot) => [
@@ -193,6 +256,9 @@ export const normalizeMealsState = (meals = {}) => {
             items: normalizeStringList(plan?.meals?.[slot.id]?.items),
             portionItems: Array.isArray(plan?.meals?.[slot.id]?.portionItems) ? plan.meals[slot.id].portionItems : [],
             substitutions: Array.isArray(plan?.meals?.[slot.id]?.substitutions) ? plan.meals[slot.id].substitutions : [],
+            chosenReason: String(plan?.meals?.[slot.id]?.chosenReason || '').trim(),
+            nutritionSource: String(plan?.meals?.[slot.id]?.nutritionSource || 'database').trim(),
+            estimatedNutrition: Boolean(plan?.meals?.[slot.id]?.estimatedNutrition),
             completed: Boolean(plan?.meals?.[slot.id]?.completed),
           }),
         ]),
@@ -239,8 +305,10 @@ const buildExcludedSet = (excludedItems = []) => new Set(normalizeStringList(exc
 const ingredientAvailable = (ingredient, availableIngredients) => {
   const canonical = canonicalize(ingredient);
   if (availableIngredients.has(canonical)) return true;
-  if (canonical === 'dal') {
-    return [...availableIngredients].some((item) => item.includes('dal') || ['rajma', 'chole'].includes(item));
+  const family = ingredientFamilies[canonical];
+  if (family?.some((item) => availableIngredients.has(canonicalize(item)))) return true;
+  if (canonical.includes('dal')) {
+    return [...availableIngredients].some((item) => item.includes('dal') || ['rajma', 'chole', 'lobia'].includes(item));
   }
   return false;
 };
@@ -346,6 +414,143 @@ const mealPreferenceScore = ({ meal, slotId, targetCalories, goalType, rule, rep
   return calorieGap + repeatPenalty + macroBonus + proteinBonus + weightLossBonus + fixedBonus + noteBonus + slotBonus;
 };
 
+const buildChosenReason = ({ meal, slotId, targetCalories, goalType, rule, calorieGap }) => {
+  const reasons = [];
+  reasons.push(`matched your available ingredients for ${slotId}`);
+  reasons.push(`${Math.round(Math.abs(calorieGap))} kcal away from the ${targetCalories} kcal target`);
+  if (meal.goalTags.includes(goalType)) reasons.push(`tagged as a good ${goalType.replace('-', ' ')} fit`);
+  if (rule.fixedItems.length && rule.fixedItems.some((item) => meal.ingredients.some((ingredient) => canonicalize(ingredient) === canonicalize(item)))) {
+    reasons.push('includes one of your priority ingredients');
+  }
+  return reasons.join(' | ');
+};
+
+const toTitleCase = (value) => String(value || '')
+  .replace(/_/g, ' ')
+  .replace(/\b\w/g, (match) => match.toUpperCase());
+
+const uniqueItems = (items = []) => [...new Set(items.filter(Boolean))];
+
+const pickFirstMatching = (items, matcher) => items.find((item) => matcher(canonicalize(item))) || '';
+
+const hasCategoryItem = (items, category) => items.some((item) => category.has(canonicalize(item)));
+
+const buildFallbackTemplatePool = ({ slotId, pantryItems, rule }) => {
+  const ingredients = uniqueItems([
+    ...rule.fixedItems,
+    ...rule.flexibleItems,
+    ...pantryItems,
+  ]).map(canonicalize).filter(Boolean);
+
+  const protein = pickFirstMatching(ingredients, (item) => proteinIngredientSet.has(item));
+  const carb = pickFirstMatching(ingredients, (item) => carbIngredientSet.has(item));
+  const vegetable = pickFirstMatching(ingredients, (item) => vegetableIngredientSet.has(item));
+  const fruit = pickFirstMatching(ingredients, (item) => fruitIngredientSet.has(item));
+  const fat = pickFirstMatching(ingredients, (item) => fatIngredientSet.has(item));
+
+  const templates = [];
+
+  if (slotId === 'breakfast') {
+    if (protein === 'eggs') {
+      templates.push({
+        name: `Egg${vegetable ? ` and ${toTitleCase(vegetable)}` : ''} Breakfast Plate`,
+        items: uniqueItems([protein, vegetable, carb]),
+        portion: `3 eggs${vegetable ? ` + 1 cup ${vegetable}` : ''}${carb ? ` + 1 serving ${toTitleCase(carb)}` : ''}`,
+        calories: 380,
+        protein: 28,
+        carbs: carb ? 26 : 10,
+        fat: 18,
+      });
+    }
+    if (protein === 'paneer' || protein === 'tofu') {
+      templates.push({
+        name: `${toTitleCase(protein)} Breakfast Bowl`,
+        items: uniqueItems([protein, vegetable, carb]),
+        portion: `150 g ${toTitleCase(protein)}${vegetable ? ` + 1 cup ${toTitleCase(vegetable)}` : ''}${carb ? ` + 1 serving ${toTitleCase(carb)}` : ''}`,
+        calories: 360,
+        protein: 24,
+        carbs: carb ? 24 : 12,
+        fat: 16,
+      });
+    }
+    if (protein || fruit) {
+      templates.push({
+        name: `${toTitleCase(protein || 'curd')} and ${toTitleCase(fruit || vegetable || 'seed')} Morning Bowl`,
+        items: uniqueItems([protein || 'curd', fruit || vegetable, fat]),
+        portion: `${protein ? '1 serving' : '1 cup'} ${toTitleCase(protein || 'curd')}${fruit ? ` + 1 ${toTitleCase(fruit)}` : ''}${fat ? ` + 1 tbsp ${toTitleCase(fat)}` : ''}`,
+        calories: 300,
+        protein: 18,
+        carbs: 24,
+        fat: 10,
+      });
+    }
+  }
+
+  if (slotId === 'lunch') {
+    if (protein && (carb || hasCategoryItem(ingredients, carbIngredientSet))) {
+      templates.push({
+        name: `${toTitleCase(protein)} ${carb ? `with ${toTitleCase(carb)}` : 'Lunch Plate'}`,
+        items: uniqueItems([protein, carb, vegetable]),
+        portion: `${protein === 'eggs' ? '3 eggs' : protein.includes('dal') || ['rajma', 'chole', 'lobia'].includes(protein) ? '1.5 cups' : '150 g'} ${toTitleCase(protein)}${carb ? ` + 1 serving ${toTitleCase(carb)}` : ''}${vegetable ? ` + 1 cup ${toTitleCase(vegetable)}` : ''}`,
+        calories: 620,
+        protein: 34,
+        carbs: 52,
+        fat: 16,
+      });
+    }
+    if (hasCategoryItem(ingredients, new Set(['moong dal', 'toor dal', 'masoor dal', 'urad dal', 'chana dal', 'rajma', 'chole', 'lobia']))) {
+      templates.push({
+        name: `${toTitleCase(protein && protein.includes('dal') ? protein : 'Dal')} Home Lunch Plate`,
+        items: uniqueItems([protein && protein.includes('dal') ? protein : 'dal', carb || 'rice', vegetable]),
+        portion: `1.5 cups ${toTitleCase(protein && protein.includes('dal') ? protein : 'dal')}${carb ? ` + 1 serving ${toTitleCase(carb)}` : ''}${vegetable ? ` + 1 cup ${toTitleCase(vegetable)}` : ''}`,
+        calories: 590,
+        protein: 28,
+        carbs: 68,
+        fat: 12,
+      });
+    }
+  }
+
+  if (slotId === 'dinner') {
+    if (protein) {
+      templates.push({
+        name: `Light ${toTitleCase(protein)} Dinner`,
+        items: uniqueItems([protein, vegetable, carb === 'rice' ? '' : carb]),
+        portion: `${protein === 'eggs' ? '3 eggs' : protein.includes('dal') || ['rajma', 'chole', 'lobia'].includes(protein) ? '1.25 cups' : '130 g'} ${toTitleCase(protein)}${vegetable ? ` + 1 cup ${toTitleCase(vegetable)}` : ''}${carb && carb !== 'rice' ? ` + small ${toTitleCase(carb)} serving` : ''}`,
+        calories: 420,
+        protein: 28,
+        carbs: 24,
+        fat: 15,
+      });
+    }
+      templates.push({
+        name: `${toTitleCase(vegetable || 'Vegetable')} and ${toTitleCase(protein || 'Dal')} Evening Plate`,
+        items: uniqueItems([vegetable || 'vegetables', protein || 'dal', carb && carb !== 'rice' ? carb : '']),
+      portion: `${vegetable ? `1.5 cups ${toTitleCase(vegetable)}` : '1 bowl vegetables'}${protein ? ` + 1 serving ${toTitleCase(protein)}` : ' + 1 cup dal'}`,
+      calories: 390,
+      protein: 24,
+      carbs: 26,
+      fat: 14,
+    });
+  }
+
+  if (slotId.startsWith('snack')) {
+    if (protein || fruit || fat) {
+      templates.push({
+        name: `${toTitleCase(protein || fruit || 'Pantry')} Snack Box`,
+        items: uniqueItems([protein, fruit, fat]),
+        portion: `${protein === 'eggs' ? '2 eggs' : protein ? `1 serving ${toTitleCase(protein)}` : fruit ? `1 ${toTitleCase(fruit)}` : ''}${fat ? ' + 1 small handful nuts/seeds' : ''}`,
+        calories: 180,
+        protein: protein ? 12 : 5,
+        carbs: fruit ? 16 : 10,
+        fat: fat ? 8 : 5,
+      });
+    }
+  }
+
+  return templates.filter((template) => template.items.length);
+};
+
 const chooseMealForSlot = ({
   slotId,
   targetCalories,
@@ -360,6 +565,7 @@ const chooseMealForSlot = ({
     .filter((meal) => mealMatchesFilters({ meal, slotId, availableIngredients, excludedIngredients }))
     .map((meal) => ({
       meal,
+      calorieGap: Math.abs(meal.calories - targetCalories),
       score: mealPreferenceScore({
         meal,
         slotId,
@@ -371,10 +577,22 @@ const chooseMealForSlot = ({
     }))
     .sort((left, right) => left.score - right.score || left.meal.name.localeCompare(right.meal.name));
 
-  return candidates[Math.min(dayIndex % Math.max(candidates.length, 1), Math.max(0, candidates.length - 1))]?.meal || candidates[0]?.meal || null;
+  const selected = candidates[Math.min(dayIndex % Math.max(candidates.length, 1), Math.max(0, candidates.length - 1))] || candidates[0] || null;
+  if (!selected) return null;
+  return {
+    meal: selected.meal,
+    chosenReason: buildChosenReason({
+      meal: selected.meal,
+      slotId,
+      targetCalories,
+      goalType,
+      rule,
+      calorieGap: selected.calorieGap,
+    }),
+  };
 };
 
-const scaleMeal = ({ meal, targetCalories, rule }) => {
+const scaleMeal = ({ meal, targetCalories, rule, chosenReason = '' }) => {
   const factor = meal.calories ? Math.max(0.75, Math.min(1.35, targetCalories / meal.calories)) : 1;
   const portionItems = scalePortionItems(meal.portionItems, factor);
 
@@ -391,25 +609,52 @@ const scaleMeal = ({ meal, targetCalories, rule }) => {
     fat: roundMetric(meal.fat * factor),
     prepNote: rule.note || meal.recipe?.tips || '',
     note: meal.description,
+    chosenReason,
     recipe: meal.recipe,
     substitutions: meal.substitutions || [],
+    nutritionSource: 'database',
+    estimatedNutrition: false,
   });
 };
 
-const buildFallbackMeal = ({ slotId, targetCalories, rule }) => {
-  const baseName = slotId.startsWith('snack') ? 'Custom snack plate' : 'Custom home meal';
-  const items = normalizeStringList([...rule.fixedItems, ...rule.flexibleItems]).slice(0, slotId.startsWith('snack') ? 3 : 5);
+const buildFallbackMeal = ({ slotId, targetCalories, rule, pantryItems, dayIndex, recentFallbackNames = [] }) => {
+  const templates = buildFallbackTemplatePool({ slotId, pantryItems, rule });
+  const rankedTemplates = templates
+    .map((template) => ({
+      ...template,
+      gap: Math.abs((template.calories || targetCalories) - targetCalories),
+      repeatPenalty: recentFallbackNames.includes(template.name) ? 150 : 0,
+    }))
+    .sort((left, right) => (left.gap + left.repeatPenalty) - (right.gap + right.repeatPenalty) || left.name.localeCompare(right.name));
+
+  const template = rankedTemplates[Math.min(dayIndex % Math.max(rankedTemplates.length, 1), Math.max(0, rankedTemplates.length - 1))]
+    || rankedTemplates[0]
+    || {
+      name: slotId.startsWith('snack') ? 'Pantry Snack Plate' : 'Pantry Home Plate',
+      items: normalizeStringList([...rule.fixedItems, ...rule.flexibleItems]).slice(0, slotId.startsWith('snack') ? 3 : 5),
+      portion: slotId.startsWith('snack') ? '1 compact serving' : '1 balanced plate',
+      calories: targetCalories,
+      protein: slotId.startsWith('snack') ? 10 : 20,
+      carbs: slotId === 'lunch' ? 40 : 20,
+      fat: 8,
+    };
+
+  const factor = template.calories ? Math.max(0.8, Math.min(1.2, targetCalories / template.calories)) : 1;
+
   return createEmptyMealEntry({
-    dishName: baseName,
-    description: 'Built from the ingredients you marked as available.',
-    items,
-    portion: slotId.startsWith('snack') ? '1 compact serving' : '1 balanced plate',
-    calories: roundToFive(targetCalories),
-    protein: slotId.startsWith('snack') ? 10 : 20,
-    carbs: slotId === 'lunch' ? 40 : 20,
-    fat: 8,
-    prepNote: rule.note || 'Use your available ingredients and keep portions aligned to the calorie target.',
-    note: 'Fallback meal because the current ingredient set did not match a stronger database recipe.',
+    dishName: template.name,
+    description: 'Pantry-derived meal built from the ingredients you marked as available.',
+    items: normalizeStringList(template.items),
+    portion: template.portion,
+    calories: roundToFive((template.calories || targetCalories) * factor),
+    protein: roundMetric((template.protein || 0) * factor),
+    carbs: roundMetric((template.carbs || 0) * factor),
+    fat: roundMetric((template.fat || 0) * factor),
+    prepNote: rule.note || 'Use the pantry ingredients shown and keep the plate close to this portion.',
+    note: 'Estimated pantry-derived meal because no strong database match was available for the current pantry.',
+    chosenReason: 'No strong database recipe matched your current ingredient set, so the planner built the closest pantry-based estimated meal instead.',
+    nutritionSource: 'estimate',
+    estimatedNutrition: true,
   });
 };
 
@@ -447,6 +692,7 @@ export const generateMealPlans = (meals, options = {}, context = {}) => {
   const excludedIngredients = buildExcludedSet(normalizedMeals.excludedItems);
 
   const recentMealIds = [];
+  const recentFallbackNames = Object.fromEntries(mealSlotDefinitions.map((slot) => [slot.id, []]));
 
   return Array.from({ length: totalDays }, (_, dayIndex) => {
     const date = format(addDays(parsedStart, dayIndex), 'yyyy-MM-dd');
@@ -482,11 +728,27 @@ export const generateMealPlans = (meals, options = {}, context = {}) => {
         });
 
         const mealEntry = selectedMeal
-          ? scaleMeal({ meal: selectedMeal, targetCalories: slotTargetCalories, rule })
-          : buildFallbackMeal({ slotId: slot.id, targetCalories: slotTargetCalories, rule });
+          ? scaleMeal({
+            meal: selectedMeal.meal,
+            targetCalories: slotTargetCalories,
+            rule,
+            chosenReason: selectedMeal.chosenReason,
+          })
+          : buildFallbackMeal({
+            slotId: slot.id,
+            targetCalories: slotTargetCalories,
+            rule,
+            pantryItems: normalizedMeals.pantryItems,
+            dayIndex,
+            recentFallbackNames: recentFallbackNames[slot.id],
+          });
 
-        if (selectedMeal) recentMealIds.unshift(selectedMeal.id);
+        if (selectedMeal?.meal) recentMealIds.unshift(selectedMeal.meal.id);
         if (recentMealIds.length > 8) recentMealIds.pop();
+        if (!selectedMeal?.meal && mealEntry?.dishName) {
+          recentFallbackNames[slot.id].unshift(mealEntry.dishName);
+          if (recentFallbackNames[slot.id].length > 4) recentFallbackNames[slot.id].pop();
+        }
 
         return [slot.id, mealEntry];
       }),
@@ -495,6 +757,7 @@ export const generateMealPlans = (meals, options = {}, context = {}) => {
     return {
       id: crypto.randomUUID(),
       date,
+      source: 'library',
       summary: buildDaySummary({
         date,
         meals: dayMeals,
@@ -549,6 +812,7 @@ export const buildWeeklyMealSummary = (plans = []) => {
   return {
     rows: firstSeven.map((plan) => ({
       date: plan.date,
+      source: plan.source || 'library',
       breakfast: plan.meals?.breakfast?.dishName || '—',
       lunch: plan.meals?.lunch?.dishName || '—',
       dinner: plan.meals?.dinner?.dishName || '—',
@@ -622,6 +886,38 @@ export const buildGoalProgress = (plans = []) => plans.slice(0, 7).map((plan) =>
   delta: plan.summary?.deltaVsGoal || 0,
 }));
 
+export const buildEligibleMealCatalog = ({ mealsState, profile, fitness, perSlot = 12 }) => {
+  const normalizedMeals = normalizeMealsState(mealsState);
+  const targets = calculateCalorieTargets({ meals: normalizedMeals, profile, fitness });
+  const availableIngredients = buildAvailableIngredientSet({
+    pantryItems: normalizedMeals.pantryItems,
+    mealRules: normalizedMeals.mealRules,
+  });
+  const excludedIngredients = buildExcludedSet(normalizedMeals.excludedItems);
+
+  return Object.fromEntries(
+    mealSlotDefinitions.map((slot) => {
+      const targetCalories = roundToFive(targets.goalCalories * (targets.mealDistribution[slot.id] || 0));
+      const eligible = mealDatabase
+        .filter((meal) => mealMatchesFilters({ meal, slotId: slot.id, availableIngredients, excludedIngredients }))
+        .sort((left, right) => Math.abs(left.calories - targetCalories) - Math.abs(right.calories - targetCalories))
+        .slice(0, perSlot)
+        .map((meal) => ({
+          id: meal.id,
+          dishName: meal.name,
+          calories: meal.calories,
+          protein: meal.protein,
+          carbs: meal.carbs,
+          fat: meal.fat,
+          ingredients: meal.ingredients,
+          description: meal.description,
+        }));
+
+      return [slot.id, eligible];
+    }),
+  );
+};
+
 export const swapMealEntry = ({ mealsState, plan, slotId, profile, fitness }) => {
   if (!plan || !isMealSlotId(slotId)) return null;
   const normalizedMeals = normalizeMealsState(mealsState);
@@ -637,11 +933,16 @@ export const swapMealEntry = ({ mealsState, plan, slotId, profile, fitness }) =>
   const alternative = mealDatabase
     .filter((meal) => mealMatchesFilters({ meal, slotId, availableIngredients, excludedIngredients }))
     .filter((meal) => meal.id !== currentMeal?.mealId)
-    .filter((meal) => Math.abs(meal.calories - targetCalories) <= 80)
+    .filter((meal) => Math.abs(meal.calories - targetCalories) <= 140)
     .sort((left, right) => Math.abs(left.calories - targetCalories) - Math.abs(right.calories - targetCalories))[0];
 
   return alternative
-    ? scaleMeal({ meal: alternative, targetCalories, rule: normalizedMeals.mealRules[slotId] })
+    ? scaleMeal({
+      meal: alternative,
+      targetCalories,
+      rule: normalizedMeals.mealRules[slotId],
+      chosenReason: `Swapped within a similar calorie band using your currently eligible ${slotId} options.`,
+    })
     : null;
 };
 

@@ -73,6 +73,7 @@ const normalizeMealsResponse = (payload, options = {}) => {
               description: String(meal?.description || meal?.note || '').trim(),
               items: normalizeStringList(meal?.items),
               note: String(meal?.note || '').trim(),
+              chosenReason: String(meal?.chosenReason || '').trim(),
               portion: String(meal?.portion || '').trim(),
               prepNote: String(meal?.prepNote || '').trim(),
               calories: Number(meal?.calories || 0),
@@ -81,6 +82,8 @@ const normalizeMealsResponse = (payload, options = {}) => {
               fat: Number(meal?.fat || 0),
               portionItems: [],
               substitutions: [],
+              nutritionSource: String(meal?.nutritionSource || 'ai').trim(),
+              estimatedNutrition: Boolean(meal?.estimatedNutrition),
               recipe: meal?.recipe ? {
                 cookTime: String(meal.recipe.cookTime || '').trim(),
                 steps: Array.isArray(meal.recipe.steps) ? meal.recipe.steps.map((step) => String(step || '').trim()).filter(Boolean) : [],
@@ -150,7 +153,7 @@ async function analyzeReport(filePath, mimeType) {
   return extractJson(response.text());
 }
 
-async function generateMealPlanWithAI({ meals, profile, fitness, options = {} }) {
+async function generateMealPlanWithAI({ meals, profile, fitness, eligibleMeals = {}, options = {} }) {
   const { model } = requireClient();
   const requestedDays = [7, 14, 30].includes(Number(options.days)) ? Number(options.days) : 30;
   const startDate = String(options.startDate || new Date().toISOString().slice(0, 10));
@@ -161,7 +164,6 @@ async function generateMealPlanWithAI({ meals, profile, fitness, options = {} })
     excludedItems: Array.isArray(meals?.excludedItems) ? meals.excludedItems : [],
     mealRules: meals?.mealRules || {},
   };
-
   const prompt = `
 You are designing a vegetarian-with-eggs meal plan for a personal dashboard.
 
@@ -181,6 +183,7 @@ ${JSON.stringify({
     },
     latestWeightKg: latestEntry?.weightKg || 86,
     meals: compactMealsContext,
+    eligibleMeals,
     options: { startDate, days: requestedDays },
   }, null, 2)}
 
@@ -188,6 +191,7 @@ Instructions:
 - Respect all excluded foods strictly.
 - Use mandatory items for each slot whenever possible.
 - Use flexible items and example meals to create variety.
+- Prefer choosing from the eligible meal library provided in the context whenever possible.
 - Favor lean-muscle, high-protein, moderate-carb choices.
 - Think in complete meals, not just ingredient lists.
 - Do not repeat the same raw material list across every meal.
@@ -214,17 +218,20 @@ Instructions:
           "carbs": 28,
           "fat": 12,
           "note": "why this meal fits",
+          "chosenReason": "why this exact dish was selected",
           "prepNote": "prep note for staff/family",
+          "nutritionSource": "ai",
+          "estimatedNutrition": false,
           "recipe": {
             "cookTime": "15 min",
             "steps": ["step 1", "step 2"],
             "tips": "small tip"
           }
         },
-        "snack1": { "dishName": "", "description": "", "items": [], "portion": "", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "note": "", "prepNote": "", "recipe": { "cookTime": "", "steps": [], "tips": "" } },
-        "lunch": { "dishName": "", "description": "", "items": [], "portion": "", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "note": "", "prepNote": "", "recipe": { "cookTime": "", "steps": [], "tips": "" } },
-        "snack2": { "dishName": "", "description": "", "items": [], "portion": "", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "note": "", "prepNote": "", "recipe": { "cookTime": "", "steps": [], "tips": "" } },
-        "dinner": { "dishName": "", "description": "", "items": [], "portion": "", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "note": "", "prepNote": "", "recipe": { "cookTime": "", "steps": [], "tips": "" } }
+        "snack1": { "dishName": "", "description": "", "items": [], "portion": "", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "note": "", "chosenReason": "", "prepNote": "", "nutritionSource": "ai", "estimatedNutrition": false, "recipe": { "cookTime": "", "steps": [], "tips": "" } },
+        "lunch": { "dishName": "", "description": "", "items": [], "portion": "", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "note": "", "chosenReason": "", "prepNote": "", "nutritionSource": "ai", "estimatedNutrition": false, "recipe": { "cookTime": "", "steps": [], "tips": "" } },
+        "snack2": { "dishName": "", "description": "", "items": [], "portion": "", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "note": "", "chosenReason": "", "prepNote": "", "nutritionSource": "ai", "estimatedNutrition": false, "recipe": { "cookTime": "", "steps": [], "tips": "" } },
+        "dinner": { "dishName": "", "description": "", "items": [], "portion": "", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "note": "", "chosenReason": "", "prepNote": "", "nutritionSource": "ai", "estimatedNutrition": false, "recipe": { "cookTime": "", "steps": [], "tips": "" } }
       }
     }
   ]
