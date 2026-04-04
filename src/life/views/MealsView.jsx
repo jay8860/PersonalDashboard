@@ -180,6 +180,7 @@ const MealsView = ({
   };
 
   const plannerProfile = meals.plannerProfile || {};
+  const generationMeta = meals.generationMeta || {};
   const hydrationLiters = ((plannerTargets?.hydrationMl || 0) / 1000).toFixed(1);
 
   return (
@@ -388,6 +389,22 @@ const MealsView = ({
           <SummaryPill label="Lunches" value={String(mealDatabaseStats.lunch)} />
           <SummaryPill label="Dinners" value={String(mealDatabaseStats.dinner)} />
           <SummaryPill label="Snack Options" value={String(mealDatabaseStats.snacks)} />
+        </div>
+
+        <div className="mt-6 rounded-[1.5rem] border border-violet-100 bg-violet-50/70 p-4 dark:border-violet-500/15 dark:bg-violet-500/10">
+          <p className="life-card-label">How the latest generation worked</p>
+          <h3 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
+            AI uses your raw materials first, then prefers eligible meals from the built-in Indian meal library.
+          </h3>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryPill label="Mode" value={generationMeta.mode === 'mixed' ? 'AI + fallback' : generationMeta.mode === 'ai' ? 'AI' : 'Library'} />
+            <SummaryPill label="Requested days" value={String(generationMeta.requestedDays || meals.planLengthDays || 0)} />
+            <SummaryPill label="AI days" value={String(generationMeta.aiDays || 0)} />
+            <SummaryPill label="Fallback days" value={String(generationMeta.fallbackDays || 0)} />
+          </div>
+          <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-white/60">
+            If you press `Generate with AI` and still see mostly `Library` or `Library fallback`, that means Gemini did not return enough usable day plans for your requested range, so the planner filled the rest from the local meal engine using your pantry and eligible library matches.
+          </p>
         </div>
 
         <div className="mt-6 rounded-[1.5rem] border border-sky-100 bg-sky-50/80 p-4 dark:border-sky-500/15 dark:bg-sky-500/10">
@@ -667,6 +684,13 @@ const MealsView = ({
                     <SummaryPill label="Fat" value={`${plan.summary?.fatTarget || 0} g`} />
                   </div>
 
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <SummaryPill label="Planned Calories" value={`${plan.summary?.dailyCalories || 0} kcal`} />
+                    <SummaryPill label="Planned Protein" value={`${plan.summary?.dailyProtein || 0} g`} />
+                    <SummaryPill label="Planned Carbs" value={`${plan.summary?.dailyCarbs || 0} g`} />
+                    <SummaryPill label="Planned Fat" value={`${plan.summary?.dailyFat || 0} g`} />
+                  </div>
+
                   <div className="mt-5 grid gap-3 xl:grid-cols-2">
                     {mealSlotDefinitions.map((slot) => {
                       const entry = plan.meals?.[slot.id];
@@ -734,6 +758,9 @@ const MealsView = ({
                         <tr className="border-b border-slate-200 dark:border-white/10">
                           <th className="pb-3 pr-4">Meal</th>
                           <th className="pb-3 pr-4">Calories</th>
+                          <th className="pb-3 pr-4">Protein</th>
+                          <th className="pb-3 pr-4">Carbs</th>
+                          <th className="pb-3 pr-4">Fat</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -741,11 +768,17 @@ const MealsView = ({
                           <tr key={slot.id} className="border-b border-slate-100 dark:border-white/5">
                             <td className="py-2 pr-4">{slot.label}</td>
                             <td className="py-2 pr-4">{plan.meals?.[slot.id]?.calories || 0}</td>
+                            <td className="py-2 pr-4">{plan.meals?.[slot.id]?.protein || 0} g</td>
+                            <td className="py-2 pr-4">{plan.meals?.[slot.id]?.carbs || 0} g</td>
+                            <td className="py-2 pr-4">{plan.meals?.[slot.id]?.fat || 0} g</td>
                           </tr>
                         ))}
                         <tr>
                           <td className="pt-3 pr-4 font-bold">TOTAL</td>
                           <td className="pt-3 pr-4 font-bold">{plan.summary?.dailyCalories || 0}</td>
+                          <td className="pt-3 pr-4 font-bold">{plan.summary?.dailyProtein || 0} g</td>
+                          <td className="pt-3 pr-4 font-bold">{plan.summary?.dailyCarbs || 0} g</td>
+                          <td className="pt-3 pr-4 font-bold">{plan.summary?.dailyFat || 0} g</td>
                         </tr>
                         <tr>
                           <td className="pt-2 pr-4 text-slate-500 dark:text-white/45">vs Goal</td>

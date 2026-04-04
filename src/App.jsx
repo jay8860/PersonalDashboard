@@ -1094,6 +1094,14 @@ function App() {
           profile: current.profile,
           fitness: current.fitness,
         }).map((plan) => ({ ...plan, source: 'library' })),
+        generationMeta: {
+          mode: 'library',
+          requestedDays: Number(days) || Number(current.meals.planLengthDays) || 0,
+          aiDays: 0,
+          fallbackDays: Number(days) || Number(current.meals.planLengthDays) || 0,
+          aiReturnedDays: 0,
+          lastRunAt: new Date().toISOString(),
+        },
       },
     }));
   };
@@ -1150,12 +1158,22 @@ function App() {
       const aiPlan = enrichedPlans?.find((plan) => plan.date === fallbackPlan.date);
       return aiPlan || { ...fallbackPlan, source: 'library-fallback' };
     });
+    const aiDays = mergedPlans.filter((plan) => plan.source === 'ai').length;
+    const fallbackDays = mergedPlans.length - aiDays;
 
     updateDashboard((current) => ({
       ...current,
       meals: {
         ...current.meals,
         aiGuidance: Array.isArray(response?.aiGuidance) ? response.aiGuidance : current.meals.aiGuidance,
+        generationMeta: {
+          mode: aiDays > 0 && fallbackDays > 0 ? 'mixed' : aiDays > 0 ? 'ai' : 'library',
+          requestedDays: Number(days) || Number(current.meals.planLengthDays) || 0,
+          aiDays,
+          fallbackDays,
+          aiReturnedDays: Array.isArray(response?.generatedPlans) ? response.generatedPlans.length : 0,
+          lastRunAt: new Date().toISOString(),
+        },
         generatedPlans: mergedPlans.length ? mergedPlans : current.meals.generatedPlans,
       },
     }));

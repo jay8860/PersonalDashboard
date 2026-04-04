@@ -198,6 +198,15 @@ const createDefaultPlannerProfile = () => ({
   fastingMode: 'standard',
 });
 
+const createDefaultGenerationMeta = () => ({
+  mode: 'library',
+  requestedDays: 0,
+  aiDays: 0,
+  fallbackDays: 0,
+  aiReturnedDays: 0,
+  lastRunAt: '',
+});
+
 export const createEmptyMealsState = () => ({
   objective: 'Lean muscle',
   planLengthDays: 7,
@@ -206,6 +215,7 @@ export const createEmptyMealsState = () => ({
   excludedItems: [],
   aiGuidance: [],
   plannerProfile: createDefaultPlannerProfile(),
+  generationMeta: createDefaultGenerationMeta(),
   mealRules: Object.fromEntries(
     mealSlotDefinitions.map((slot) => [slot.id, createEmptyMealRule()]),
   ),
@@ -275,6 +285,16 @@ export const normalizeMealsState = (meals = {}) => {
     excludedItems: normalizeStringList(meals?.excludedItems),
     aiGuidance: normalizeStringList(meals?.aiGuidance),
     plannerProfile: normalizePlannerProfile(meals?.plannerProfile),
+    generationMeta: {
+      ...createDefaultGenerationMeta(),
+      ...(meals?.generationMeta || {}),
+      mode: ['library', 'ai', 'mixed'].includes(meals?.generationMeta?.mode) ? meals.generationMeta.mode : 'library',
+      requestedDays: Number(meals?.generationMeta?.requestedDays) || 0,
+      aiDays: Number(meals?.generationMeta?.aiDays) || 0,
+      fallbackDays: Number(meals?.generationMeta?.fallbackDays) || 0,
+      aiReturnedDays: Number(meals?.generationMeta?.aiReturnedDays) || 0,
+      lastRunAt: String(meals?.generationMeta?.lastRunAt || ''),
+    },
     mealRules,
     generatedPlans,
   };
