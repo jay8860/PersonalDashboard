@@ -36,6 +36,7 @@ const defaultGoals = {
   weeklyWorkoutMinutes: '150',
   stepTarget: '8000',
   sleepTarget: '7.5',
+  workoutSplitType: 'combined',
 };
 
 const createEmptyPerson = (overrides = {}) => ({

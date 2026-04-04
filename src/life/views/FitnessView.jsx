@@ -45,6 +45,193 @@ const computeBmi = (weightKg, heightCm) => {
   return weight / (meters * meters);
 };
 
+const workoutSplitOptions = [
+  { id: 'combined', label: 'Combined Body Parts' },
+  { id: 'single', label: 'Single Body Part Focus' },
+];
+
+const buildWeightCue = ({ heavy = false, medium = false, unilateral = false }) => {
+  if (heavy) return unilateral ? '1 x 10 kg dumbbell' : '2 x 10 kg dumbbells';
+  if (medium) return unilateral ? '1 x 5 kg dumbbell' : '2 x 5 kg dumbbells';
+  return 'Bodyweight / mat / push-up bars';
+};
+
+const buildHomeGymSchedule = ({ splitType, latestWeightKg }) => {
+  const strongerBase = (numeric(latestWeightKg) || 86) >= 80;
+  const combinedSchedule = [
+    {
+      day: 'Monday',
+      focus: 'Recovery / Off',
+      duration: 'Off day',
+      note: 'Walk, stretch lightly, and recover.',
+      exercises: [],
+    },
+    {
+      day: 'Tuesday',
+      focus: 'Push + Core',
+      duration: '30 min',
+      note: 'Chest, shoulders, triceps, and ab stability.',
+      exercises: [
+        ['Flat dumbbell bench press', buildWeightCue({ heavy: strongerBase, medium: !strongerBase }), '4 x 10-12'],
+        ['Push-ups on bars', 'Bodyweight', '3 x 10-15'],
+        ['Seated dumbbell shoulder press', buildWeightCue({ medium: true }), '3 x 10-12'],
+        ['Bench tricep dips', 'Bodyweight', '3 x 12-15'],
+        ['Dead bug or plank', 'Bodyweight / mat', '3 x 40 sec'],
+      ],
+    },
+    {
+      day: 'Wednesday',
+      focus: 'Lower Body + Pull',
+      duration: '30 min',
+      note: 'Legs, glutes, and upper-back work.',
+      exercises: [
+        ['Goblet squat', strongerBase ? '1 x 10 kg dumbbell' : '1 x 5 kg dumbbell', '4 x 12'],
+        ['Romanian deadlift', buildWeightCue({ heavy: strongerBase, medium: !strongerBase }), '4 x 10-12'],
+        ['One-arm dumbbell row', buildWeightCue({ heavy: true, unilateral: true }), '3 x 12 each side'],
+        ['Reverse lunges', strongerBase ? '2 x 5 kg dumbbells' : 'Bodyweight', '3 x 10 each side'],
+        ['Glute bridge', 'Bodyweight / mat', '3 x 15'],
+      ],
+    },
+    {
+      day: 'Thursday',
+      focus: 'Upper Body Mix',
+      duration: '30 min',
+      note: 'Balanced upper-body volume without going too heavy.',
+      exercises: [
+        ['Incline push-up on bench', 'Bodyweight', '3 x 12-15'],
+        ['Chest-supported dumbbell row on bench', buildWeightCue({ medium: true }), '3 x 12'],
+        ['Dumbbell floor press', buildWeightCue({ medium: true }), '3 x 12'],
+        ['Lateral raise', '2 x 5 kg dumbbells or lighter tempo reps', '3 x 12'],
+        ['Hammer curl', '2 x 5 kg dumbbells', '3 x 12'],
+      ],
+    },
+    {
+      day: 'Friday',
+      focus: 'Legs + Core',
+      duration: '30 min',
+      note: 'Second lower-body touch for weekly consistency.',
+      exercises: [
+        ['Bulgarian split squat using bench', strongerBase ? '2 x 5 kg dumbbells' : 'Bodyweight', '3 x 10 each side'],
+        ['Dumbbell sumo squat', strongerBase ? '1 x 10 kg dumbbell' : '1 x 5 kg dumbbell', '3 x 12-15'],
+        ['Standing calf raise', 'Bodyweight', '3 x 18-20'],
+        ['Mountain climbers', 'Bodyweight / mat', '3 x 30 sec'],
+        ['Forearm plank', 'Bodyweight / mat', '3 x 45 sec'],
+      ],
+    },
+    {
+      day: 'Saturday',
+      focus: 'Pull + Arms',
+      duration: '30 min',
+      note: 'Back, rear shoulders, biceps, and posture work.',
+      exercises: [
+        ['One-arm dumbbell row', buildWeightCue({ heavy: true, unilateral: true }), '4 x 10-12 each side'],
+        ['Rear-delt raise on bench', '2 x 5 kg dumbbells', '3 x 12'],
+        ['Alternating bicep curl', '2 x 5 kg dumbbells', '3 x 12 each side'],
+        ['Cross-body hammer curl', '2 x 5 kg dumbbells', '3 x 10 each side'],
+        ['Superman hold', 'Bodyweight / mat', '3 x 30 sec'],
+      ],
+    },
+    {
+      day: 'Sunday',
+      focus: 'Full Body Conditioning',
+      duration: '30 min',
+      note: 'Higher movement density with practical home exercises.',
+      exercises: [
+        ['Dumbbell thruster', '2 x 5 kg dumbbells', '3 x 12'],
+        ['Push-up to shoulder tap', 'Bodyweight / push-up bars', '3 x 10 each side'],
+        ['Renegade row', '2 x 5 kg dumbbells', '3 x 8 each side'],
+        ['Bench step-ups', strongerBase ? '2 x 5 kg dumbbells' : 'Bodyweight', '3 x 12 each side'],
+        ['Bicycle crunch', 'Bodyweight / mat', '3 x 20 total'],
+      ],
+    },
+  ];
+
+  const singleSchedule = [
+    {
+      day: 'Monday',
+      focus: 'Recovery / Off',
+      duration: 'Off day',
+      note: 'Walk, stretch lightly, and recover.',
+      exercises: [],
+    },
+    {
+      day: 'Tuesday',
+      focus: 'Chest',
+      duration: '30 min',
+      note: 'Pressing focus with chest fatigue first.',
+      exercises: [
+        ['Flat dumbbell bench press', buildWeightCue({ heavy: strongerBase, medium: !strongerBase }), '4 x 10-12'],
+        ['Dumbbell floor fly press hybrid', '2 x 5 kg dumbbells', '3 x 12'],
+        ['Push-ups on bars', 'Bodyweight', '3 x 12-15'],
+        ['Bench push-up burnout', 'Bodyweight', '2 x max reps'],
+      ],
+    },
+    {
+      day: 'Wednesday',
+      focus: 'Back',
+      duration: '30 min',
+      note: 'Rows and upper-back control.',
+      exercises: [
+        ['One-arm dumbbell row', buildWeightCue({ heavy: true, unilateral: true }), '4 x 12 each side'],
+        ['Chest-supported row on bench', '2 x 5 kg dumbbells', '3 x 12'],
+        ['Rear-delt raise', '2 x 5 kg dumbbells', '3 x 12'],
+        ['Superman hold', 'Bodyweight / mat', '3 x 30 sec'],
+      ],
+    },
+    {
+      day: 'Thursday',
+      focus: 'Legs',
+      duration: '30 min',
+      note: 'Lower-body strength with limited home equipment.',
+      exercises: [
+        ['Goblet squat', strongerBase ? '1 x 10 kg dumbbell' : '1 x 5 kg dumbbell', '4 x 12'],
+        ['Romanian deadlift', buildWeightCue({ heavy: strongerBase, medium: !strongerBase }), '4 x 10-12'],
+        ['Reverse lunge', strongerBase ? '2 x 5 kg dumbbells' : 'Bodyweight', '3 x 10 each side'],
+        ['Calf raise', 'Bodyweight', '3 x 20'],
+      ],
+    },
+    {
+      day: 'Friday',
+      focus: 'Shoulders',
+      duration: '30 min',
+      note: 'Delts, posture, and shoulder endurance.',
+      exercises: [
+        ['Seated dumbbell shoulder press', '2 x 5 kg dumbbells', '4 x 10-12'],
+        ['Lateral raise', '2 x 5 kg dumbbells', '3 x 12'],
+        ['Front raise', '2 x 5 kg dumbbells', '3 x 10-12'],
+        ['Pike push-up', 'Bodyweight', '3 x 8-12'],
+      ],
+    },
+    {
+      day: 'Saturday',
+      focus: 'Arms',
+      duration: '30 min',
+      note: 'Biceps and triceps isolation with quick transitions.',
+      exercises: [
+        ['Alternating dumbbell curl', '2 x 5 kg dumbbells', '4 x 12 each side'],
+        ['Hammer curl', '2 x 5 kg dumbbells', '3 x 10-12'],
+        ['Bench tricep dips', 'Bodyweight', '4 x 12-15'],
+        ['Overhead dumbbell tricep extension', strongerBase ? '1 x 10 kg dumbbell' : '1 x 5 kg dumbbell', '3 x 12'],
+      ],
+    },
+    {
+      day: 'Sunday',
+      focus: 'Core + Conditioning',
+      duration: '30 min',
+      note: 'Core stability plus metabolic finishers.',
+      exercises: [
+        ['Plank', 'Bodyweight / mat', '3 x 45 sec'],
+        ['Dead bug', 'Bodyweight / mat', '3 x 12 each side'],
+        ['Mountain climbers', 'Bodyweight / mat', '3 x 30 sec'],
+        ['Dumbbell thruster', '2 x 5 kg dumbbells', '3 x 12'],
+        ['Burpee or squat thrust', 'Bodyweight', '3 x 10'],
+      ],
+    },
+  ];
+
+  return splitType === 'single' ? singleSchedule : combinedSchedule;
+};
+
 const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChange }) => {
   const [entryDraft, setEntryDraft] = useState(createEntryDraft());
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
@@ -75,6 +262,11 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
     ? Math.round(sortedEntries.reduce((sum, entry) => sum + (numeric(entry.workoutMinutes) || 0), 0) / sortedEntries.length)
     : null;
   const latestBmi = computeBmi(latest?.weightKg, profile.heightCm);
+  const workoutSplitType = fitness.goals.workoutSplitType || 'combined';
+  const homeGymSchedule = buildHomeGymSchedule({
+    splitType: workoutSplitType,
+    latestWeightKg: latest?.weightKg,
+  });
 
   const insights = [];
 
@@ -121,6 +313,76 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
 
   return (
     <div className="space-y-6">
+      <section className="life-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="life-card-label">Home gym schedule</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              Your 7-day home program sits above measurements so the workout plan stays front and center.
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500 dark:text-white/55">
+              Monday stays off. The remaining 6 days are built for 30-minute sessions using your flat bench, dumbbells, mat, push-up bars, and bodyweight work.
+            </p>
+          </div>
+          <label className="space-y-2 lg:min-w-[16rem]">
+            <span className="life-card-label">Workout split</span>
+            <select
+              value={workoutSplitType}
+              onChange={(event) => onGoalsChange('workoutSplitType', event.target.value)}
+              className="life-input"
+            >
+              {workoutSplitOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          {homeGymSchedule.map((session) => (
+            <div key={session.day} className="life-soft-card">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="life-card-label">{session.day}</p>
+                  <h3 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">{session.focus}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">{session.note}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-white/10 dark:text-white/80">
+                  {session.duration}
+                </div>
+              </div>
+
+              {session.exercises.length ? (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-white/10">
+                        <th className="pb-3 pr-4">Exercise</th>
+                        <th className="pb-3 pr-4">Weight</th>
+                        <th className="pb-3 pr-0">Sets x reps</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {session.exercises.map(([exercise, weight, reps]) => (
+                        <tr key={exercise} className="border-b border-slate-100 dark:border-white/5">
+                          <td className="py-2 pr-4 font-medium text-slate-900 dark:text-white">{exercise}</td>
+                          <td className="py-2 pr-4 text-slate-500 dark:text-white/55">{weight}</td>
+                          <td className="py-2 pr-0 text-slate-500 dark:text-white/55">{reps}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-[1rem] border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:text-white/55">
+                  Full rest day. Optional light walk + 8 to 10 minutes of stretching.
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="grid gap-6 xl:grid-cols-[0.92fr,1.08fr]">
         <section className="life-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -217,15 +479,28 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
               ['Weekly Workout Minutes', 'weeklyWorkoutMinutes'],
               ['Daily Step Target', 'stepTarget'],
               ['Sleep Target (hours)', 'sleepTarget'],
+              ['Workout split', 'workoutSplitType'],
             ].map(([label, key]) => (
               <label key={key} className="space-y-2">
                 <span className="life-card-label">{label}</span>
-                <input
-                  type="number"
-                  value={fitness.goals[key]}
-                  onChange={(event) => onGoalsChange(key, event.target.value)}
-                  className="life-input"
-                />
+                {key === 'workoutSplitType' ? (
+                  <select
+                    value={fitness.goals[key]}
+                    onChange={(event) => onGoalsChange(key, event.target.value)}
+                    className="life-input"
+                  >
+                    {workoutSplitOptions.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    value={fitness.goals[key]}
+                    onChange={(event) => onGoalsChange(key, event.target.value)}
+                    className="life-input"
+                  />
+                )}
               </label>
             ))}
           </div>
