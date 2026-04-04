@@ -1923,30 +1923,24 @@ function App() {
   };
 
   return (
-    <div className={isDark ? 'life-shell min-h-screen bg-[#050816] text-white transition-colors duration-500 dark' : 'life-shell min-h-screen bg-[#f4f7ff] text-slate-900 transition-colors duration-500'}>
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute left-[-10%] top-[-12%] h-[28rem] w-[28rem] rounded-full bg-sky-300/30 blur-[150px] dark:bg-sky-500/10" />
-        <div className="absolute right-[12%] top-[4%] h-[16rem] w-[16rem] rounded-full bg-fuchsia-200/30 blur-[120px] dark:bg-fuchsia-500/10" />
-        <div className="absolute bottom-[-12%] right-[-6%] h-[24rem] w-[24rem] rounded-full bg-amber-300/22 blur-[150px] dark:bg-amber-500/10" />
-        <div className="absolute bottom-[15%] left-[18%] h-[18rem] w-[18rem] rounded-full bg-teal-200/22 blur-[130px] dark:bg-teal-500/8" />
-      </div>
+    <div className={isDark ? 'life-shell min-h-screen bg-[#020202] text-white transition-colors duration-500 dark' : 'life-shell min-h-screen bg-[#f5f6f8] text-slate-900 transition-colors duration-500'}>
 
-      <header ref={shellHeaderRef} className={`sticky top-0 z-50 px-4 transition-all duration-300 ${headerCollapsed ? 'pt-3' : 'pt-4'}`}>
-        <div className={`mx-auto max-w-[1600px] border border-white/80 bg-white/75 shadow-[0_24px_70px_rgba(15,23,42,0.12)] backdrop-blur-2xl transition-all duration-300 dark:border-white/10 dark:bg-slate-950/72 ${headerCollapsed ? 'rounded-[1.4rem] p-3' : 'rounded-[1.8rem] p-4'}`}>
-          <div className={`flex flex-col ${headerCollapsed ? 'gap-3' : 'gap-4'}`}>
+      <header ref={shellHeaderRef} className={`sticky top-0 z-50 px-4 transition-all duration-300 ${headerCollapsed ? 'pt-2' : 'pt-3'}`}>
+        <div className={`mx-auto max-w-[1600px] border border-slate-200 bg-white transition-all duration-300 dark:border-white/10 dark:bg-[#050505] ${headerCollapsed ? 'rounded-[1.1rem] px-3 py-2.5' : 'rounded-[1.3rem] px-3.5 py-3'}`}>
+          <div className={`flex flex-col ${headerCollapsed ? 'gap-2.5' : 'gap-3'}`}>
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex items-center gap-4">
-                <div className={`flex items-center justify-center rounded-[1.2rem] bg-slate-950 text-white dark:bg-white dark:text-slate-950 ${headerCollapsed ? 'h-11 w-11' : 'h-14 w-14'}`}>
-                  <span className="text-lg font-black tracking-tight">LA</span>
+              <div className="flex items-center gap-3">
+                <div className={`flex items-center justify-center rounded-[1rem] bg-slate-950 text-white dark:bg-white dark:text-slate-950 ${headerCollapsed ? 'h-10 w-10' : 'h-11 w-11'}`}>
+                  <span className="text-base font-black tracking-tight">LA</span>
                 </div>
                 <div>
                   {!headerCollapsed ? <p className="life-kicker">Personal Command Center</p> : null}
-                  <div className={`flex flex-wrap items-center gap-2 ${headerCollapsed ? '' : 'mt-3'}`}>
-                    <h1 className={`${headerCollapsed ? 'text-xl' : 'text-2xl'} font-black tracking-tight text-slate-900 dark:text-white`}>Life Atlas</h1>
+                  <div className={`flex flex-wrap items-center gap-2 ${headerCollapsed ? '' : 'mt-2'}`}>
+                    <h1 className={`${headerCollapsed ? 'text-lg' : 'text-[1.35rem]'} font-black tracking-tight text-slate-900 dark:text-white`}>Life Atlas</h1>
                     {headerCollapsed ? <span className="tag">Focus view</span> : null}
                   </div>
                   {showSubtitle && !headerCollapsed ? (
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 dark:text-white/60">
+                    <p className="mt-1.5 max-w-3xl text-sm leading-6 text-slate-500 dark:text-white/60">
                       A practical home for your profile, family, medicines, documents, health records, and finances.
                     </p>
                   ) : null}

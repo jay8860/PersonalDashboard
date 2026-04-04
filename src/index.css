@@ -19,7 +19,7 @@
 
   body {
     @apply antialiased text-slate-900 dark:bg-dark-bg dark:text-dark-text transition-colors duration-300;
-    background-color: #f6f8ff;
+    background-color: #f5f6f8;
     font-family: 'Plus Jakarta Sans', sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
@@ -51,7 +51,7 @@
 
 @layer components {
   .glass-card {
-    @apply bg-white/70 dark:bg-dark-card/60 backdrop-blur-premium border border-white/20 dark:border-white/5 shadow-premium;
+    @apply bg-white dark:bg-[#050505] border border-slate-200 dark:border-white/10;
   }
 
   .premium-border {
@@ -63,7 +63,7 @@
   }
 
   .control-shell {
-    @apply rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 text-sm text-slate-700 dark:text-slate-100 shadow-inner shadow-slate-900/5 dark:shadow-black/10 transition-colors;
+    @apply rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#090909] px-4 py-3 text-sm text-slate-700 dark:text-slate-100 transition-colors;
   }
 
   .control-input {
@@ -87,21 +87,17 @@
   }
 
   .life-kicker {
-    @apply inline-flex items-center rounded-full border border-sky-200/80 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700 backdrop-blur dark:border-white/10 dark:bg-white/10 dark:text-sky-100/80;
+    @apply inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700 dark:border-white/10 dark:bg-[#090909] dark:text-white/80;
   }
 
   .life-panel {
-    @apply rounded-[1.8rem] border border-white/70 bg-white/70 p-6 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/60;
-    box-shadow:
-      0 24px 60px rgba(15, 23, 42, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    @apply rounded-[1.4rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-[#050505];
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
   }
 
   .life-soft-card {
-    @apply rounded-[1.35rem] border border-white/80 bg-white/70 p-5 backdrop-blur-lg dark:border-white/10 dark:bg-white/10;
-    box-shadow:
-      0 16px 36px rgba(15, 23, 42, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    @apply rounded-[1.15rem] border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-[#080808];
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
   }
 
   .life-card-label {
@@ -109,8 +105,7 @@
   }
 
   .life-input {
-    @apply w-full rounded-[1.05rem] border border-white/80 bg-white/75 px-4 py-3 text-sm text-slate-800 outline-none backdrop-blur transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200 dark:border-white/10 dark:bg-slate-950/60 dark:text-white dark:focus:border-sky-400 dark:focus:ring-sky-500/20;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    @apply w-full rounded-[1rem] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-white/10 dark:bg-[#090909] dark:text-white dark:focus:border-white/25 dark:focus:ring-white/10;
   }
 
   .life-textarea {
@@ -118,14 +113,13 @@
   }
 
   .life-primary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 dark:text-white;
-    background: linear-gradient(135deg, #111827 0%, #3b82f6 52%, #8b5cf6 100%);
-    box-shadow: 0 16px 32px rgba(59, 130, 246, 0.25);
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white transition dark:text-white;
+    background: #111827;
+    box-shadow: none;
   }
 
   .life-secondary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/80 bg-white/70 px-5 py-3 text-sm font-semibold text-slate-700 backdrop-blur transition hover:-translate-y-0.5 hover:border-sky-200 dark:border-white/10 dark:bg-white/10 dark:text-white/80 dark:hover:bg-white/10;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-[#090909] dark:text-white/85 dark:hover:bg-[#121212];
   }
 
   .life-danger-button {
@@ -133,18 +127,16 @@
   }
 
   .life-tab {
-    @apply inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4 py-2.5 text-sm font-semibold text-slate-700 backdrop-blur transition hover:-translate-y-0.5 hover:border-sky-200 hover:text-slate-950 dark:border-white/10 dark:bg-slate-900/70 dark:text-white/80 dark:hover:bg-slate-800/90 dark:hover:text-white;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-[#090909] dark:text-white/85 dark:hover:bg-[#121212];
   }
 
   .life-tab-active {
-    @apply border-transparent text-white shadow-md dark:border-white/0 dark:text-white;
-    background: linear-gradient(135deg, #0f172a 0%, #2563eb 52%, #7c3aed 100%);
+    @apply border-transparent text-white dark:border-white/0 dark:text-white;
+    background: #111827;
   }
 
   .tag {
-    @apply inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/10 dark:text-white/60;
-    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+    @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 dark:border-white/10 dark:bg-[#090909] dark:text-white/65;
   }
 
   .family-grid {
@@ -156,10 +148,10 @@
   }
 
   :root.dark .family-grid {
-    background-color: rgba(15, 23, 42, 0.56);
+    background-color: rgba(0, 0, 0, 0.95);
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
   }
 }
 
@@ -183,4 +175,79 @@
 
 .transition-premium {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes exercise-press {
+  0%, 100% { transform: translateY(2px); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes exercise-pushup {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+
+@keyframes exercise-squat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+@keyframes exercise-hinge {
+  0%, 100% { transform: rotate(0deg); transform-origin: center 24px; }
+  50% { transform: rotate(10deg); transform-origin: center 24px; }
+}
+
+@keyframes exercise-row {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-2px); }
+}
+
+@keyframes exercise-raise {
+  0%, 100% { transform: translateY(2px); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes exercise-curl {
+  0%, 100% { transform: rotate(0deg); transform-origin: center 22px; }
+  50% { transform: rotate(-8deg); transform-origin: center 22px; }
+}
+
+.animate-exercise-press,
+.animate-exercise-overhead,
+.animate-exercise-dip,
+.animate-exercise-thruster {
+  animation: exercise-press 1.4s ease-in-out infinite;
+}
+
+.animate-exercise-pushup,
+.animate-exercise-core,
+.animate-exercise-bridge,
+.animate-exercise-mountain,
+.animate-exercise-bicycle,
+.animate-exercise-burpee,
+.animate-exercise-superman,
+.animate-exercise-stepup {
+  animation: exercise-pushup 1.4s ease-in-out infinite;
+}
+
+.animate-exercise-squat,
+.animate-exercise-lunge,
+.animate-exercise-calf {
+  animation: exercise-squat 1.5s ease-in-out infinite;
+}
+
+.animate-exercise-hinge {
+  animation: exercise-hinge 1.5s ease-in-out infinite;
+}
+
+.animate-exercise-row {
+  animation: exercise-row 1.2s ease-in-out infinite;
+}
+
+.animate-exercise-raise {
+  animation: exercise-raise 1.2s ease-in-out infinite;
+}
+
+.animate-exercise-curl {
+  animation: exercise-curl 1.2s ease-in-out infinite;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GitBranchPlus, Link2, RefreshCcw, ScanSearch, Search, Trash2, Upload, UserPlus2, ZoomIn, ZoomOut } from 'lucide-react';
+import { Download, GitBranchPlus, Link2, RefreshCcw, ScanSearch, Search, Trash2, Upload, UserPlus2, ZoomIn, ZoomOut } from 'lucide-react';
 import {
   connectionOptions,
   getCanonicalRelationshipKey,
@@ -1426,6 +1426,63 @@ const FamilyView = ({
     window.requestAnimationFrame(() => centerViewportOnPerson('person-self', 0.64));
   };
 
+  const exportFamilyChartPdf = () => {
+    if (typeof window === 'undefined') return;
+    const chartNode = canvasViewportRef.current?.querySelector('.family-grid');
+    if (!chartNode) return;
+
+    const popup = window.open('', '_blank', 'noopener,noreferrer,width=1440,height=1024');
+    if (!popup) return;
+
+    const styleTags = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map((node) => node.outerHTML)
+      .join('\n');
+
+    popup.document.open();
+    popup.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Family chart</title>
+          ${styleTags}
+          <style>
+            body {
+              margin: 0;
+              padding: 24px;
+              background: #ffffff;
+              color: #0f172a;
+              font-family: "Plus Jakarta Sans", sans-serif;
+            }
+            .print-shell {
+              overflow: auto;
+              border: 1px solid #e2e8f0;
+              border-radius: 20px;
+              padding: 16px;
+              background: #ffffff;
+            }
+            .family-grid {
+              background-color: #ffffff !important;
+            }
+            @page {
+              size: A3 landscape;
+              margin: 12mm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-shell">${chartNode.outerHTML}</div>
+          <script>
+            window.onload = () => {
+              setTimeout(() => window.print(), 250);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+  };
+
   const chartVisibleUnitKeys = useMemo(
     () => new Set(layout.positionedUnits.map((unit) => unit.key)),
     [layout.positionedUnits],
@@ -2232,8 +2289,8 @@ const FamilyView = ({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.05fr),auto] xl:items-start">
-          <div className="space-y-4">
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.2fr),auto] xl:items-end">
+          <div className="space-y-3">
             <label className="relative block">
               <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/35" />
               <input
@@ -2268,48 +2325,42 @@ const FamilyView = ({
             ) : null}
           </div>
 
-          <div className="flex flex-wrap gap-2 xl:max-w-[28rem] xl:justify-end">
-            {[
-              { id: 'lineage', label: 'Full lineage' },
-              { id: 'direct', label: 'Direct family' },
-            ].map((mode) => (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[11rem,11rem,auto] xl:justify-end">
+            <label className="space-y-2">
+              <span className="life-card-label">View</span>
+              <select value={focusMode} onChange={(event) => handleFocusModeChange(event.target.value)} className="life-input">
+                <option value="lineage">Full lineage</option>
+                <option value="direct">Direct family</option>
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="life-card-label">Spacing</span>
+              <select value={layoutDensity} onChange={(event) => handleDensityChange(event.target.value)} className="life-input">
+                <option value="compact">Compact</option>
+                <option value="balanced">Balanced</option>
+                <option value="spacious">Spacious</option>
+              </select>
+            </label>
+            <div className="flex flex-wrap items-end gap-2">
               <button
-                key={mode.id}
                 type="button"
-                onClick={() => handleFocusModeChange(mode.id)}
-                className={focusMode === mode.id ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+                onClick={handleIsolateBranchToggle}
+                className={isolateBranch ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap'}
               >
-                {mode.label}
+                {isolateBranch ? 'Branch only' : 'Whole tree'}
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={handleIsolateBranchToggle}
-              className={isolateBranch ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
-            >
-              {isolateBranch ? 'Branch only' : 'Show full tree'}
-            </button>
-            {[
-              { id: 'compact', label: 'Compact' },
-              { id: 'balanced', label: 'Balanced' },
-              { id: 'spacious', label: 'Spacious' },
-            ].map((density) => (
               <button
-                key={density.id}
                 type="button"
-                onClick={() => handleDensityChange(density.id)}
-                className={layoutDensity === density.id ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+                onClick={handleGenerationLabelsToggle}
+                className={showGenerationLabels ? 'life-tab whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
               >
-                {density.label}
+                {showGenerationLabels ? 'Row labels on' : 'Row labels off'}
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={handleGenerationLabelsToggle}
-              className={showGenerationLabels ? 'life-tab whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
-            >
-              {showGenerationLabels ? 'Hide row labels' : 'Show row labels'}
-            </button>
+              <button type="button" onClick={exportFamilyChartPdf} className="life-secondary-button whitespace-nowrap">
+                <Download size={16} />
+                Export PDF
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2332,20 +2383,8 @@ const FamilyView = ({
           ))}
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-[1.2rem] border border-white/80 bg-white/70 px-4 py-3 text-sm text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/8 dark:text-white/70">
-            <p className="life-card-label">Card legend</p>
-            <p className="mt-2"><span className="font-semibold text-slate-900 dark:text-white">Dark card</span> = selected person</p>
-          </div>
-          <div className="rounded-[1.2rem] border border-sky-200 bg-sky-50/85 px-4 py-3 text-sm text-sky-700 backdrop-blur dark:border-sky-400/30 dark:bg-sky-500/12 dark:text-sky-200">
-            Root of the current chart is indigo. Ancestors are blue and descendants stay green.
-          </div>
-          <div className="rounded-[1.2rem] border border-violet-200 bg-violet-50/85 px-4 py-3 text-sm text-violet-700 backdrop-blur dark:border-violet-400/30 dark:bg-violet-500/12 dark:text-violet-200">
-            Spouses are violet and sibling branch context stays amber.
-          </div>
-          <div className="rounded-[1.2rem] border border-white/80 bg-white/70 px-4 py-3 text-sm text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/8 dark:text-white/70">
-            Straight solid lines show family structure. Dashed lines show lighter peer links.
-          </div>
+        <div className="mt-4 rounded-[1.15rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:bg-[#090909] dark:text-white/70">
+          Selected card stays dark. Ancestors stay blue, descendants stay green, spouses stay violet, and dashed lines show lighter peer links.
         </div>
 
         <div ref={canvasViewportRef} className="mt-6 h-[78vh] overflow-auto rounded-[1.5rem] border border-white/80 bg-slate-50/72 p-3 dark:border-white/10 dark:bg-slate-950/35">
