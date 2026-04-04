@@ -524,6 +524,11 @@ export const formatMealPlanForSharing = (plan, mealsState) => {
   ].join('\n');
 };
 
+export const formatMultipleMealPlansForSharing = (plans = [], mealsState) => plans
+  .map((plan) => formatMealPlanForSharing(plan, mealsState))
+  .filter(Boolean)
+  .join('\n\n--------------------\n\n');
+
 export const getUpcomingMealPlan = (plans = [], today = new Date().toISOString().slice(0, 10)) => (
   [...plans].find((plan) => plan.date >= today) || plans[0] || null
 );

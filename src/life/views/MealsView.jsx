@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { mealDatabaseStats } from '../mealDatabase.js';
 import {
   Bot,
@@ -17,6 +17,7 @@ import {
   activityLevelOptions,
   fastingModeOptions,
   formatMealPlanForSharing,
+  formatMultipleMealPlansForSharing,
   getMealCompletionSummary,
   getRecipeForMeal,
   getUpcomingMealPlan,
@@ -70,6 +71,7 @@ const MealsView = ({
 }) => {
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [copiedPlanId, setCopiedPlanId] = useState('');
+  const [selectedPlanIds, setSelectedPlanIds] = useState([]);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [aiError, setAiError] = useState('');
   const [recipeEntry, setRecipeEntry] = useState(null);
@@ -87,6 +89,25 @@ const MealsView = ({
     }
   };
 
+  const selectedPlans = meals.generatedPlans.filter((plan) => selectedPlanIds.includes(plan.id));
+
+  useEffect(() => {
+    const validIds = new Set(meals.generatedPlans.map((plan) => plan.id));
+    setSelectedPlanIds((current) => current.filter((id) => validIds.has(id)));
+  }, [meals.generatedPlans]);
+
+  const handleCopySelectedPlans = async () => {
+    const shareText = formatMultipleMealPlansForSharing(selectedPlans, meals);
+    if (!shareText) return;
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopiedPlanId('bulk');
+      window.setTimeout(() => setCopiedPlanId((current) => (current === 'bulk' ? '' : current)), 1800);
+    } catch {
+      setCopiedPlanId('');
+    }
+  };
+
   const openWhatsAppDraft = (plan) => {
     const shareText = formatMealPlanForSharing(plan, meals);
     const number = String(meals.whatsappNumber || '').replace(/[^\d]/g, '');
@@ -94,6 +115,32 @@ const MealsView = ({
       ? `https://wa.me/${number}?text=${encodeURIComponent(shareText)}`
       : `https://wa.me/?text=${encodeURIComponent(shareText)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openSelectedWhatsAppDraft = () => {
+    const shareText = formatMultipleMealPlansForSharing(selectedPlans, meals);
+    if (!shareText) return;
+    const number = String(meals.whatsappNumber || '').replace(/[^\d]/g, '');
+    const url = number
+      ? `https://wa.me/${number}?text=${encodeURIComponent(shareText)}`
+      : `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const toggleSelectedPlan = (planId) => {
+    setSelectedPlanIds((current) => (
+      current.includes(planId)
+        ? current.filter((id) => id !== planId)
+        : [...current, planId]
+    ));
+  };
+
+  const selectAllPlans = () => {
+    setSelectedPlanIds(meals.generatedPlans.map((plan) => plan.id));
+  };
+
+  const clearSelectedPlans = () => {
+    setSelectedPlanIds([]);
   };
 
   const handleAiGeneration = async () => {
@@ -485,14 +532,40 @@ const MealsView = ({
               </p>
             </div>
           ) : (
-            meals.generatedPlans.map((plan) => {
+            <>
+              <div className="flex flex-wrap items-center gap-3 rounded-[1.3rem] border border-white/80 bg-white/65 px-4 py-4 dark:border-white/10 dark:bg-white/5">
+                <p className="text-sm font-semibold text-slate-700 dark:text-white/75">
+                  {selectedPlans.length} day{selectedPlans.length === 1 ? '' : 's'} selected
+                </p>
+                <button type="button" onClick={selectAllPlans} className="life-secondary-button px-3 py-2">Select all</button>
+                <button type="button" onClick={clearSelectedPlans} className="life-secondary-button px-3 py-2">Clear</button>
+                <button type="button" onClick={handleCopySelectedPlans} disabled={selectedPlans.length === 0} className="life-secondary-button px-3 py-2">
+                  <ClipboardCopy size={15} />
+                  {copiedPlanId === 'bulk' ? 'Copied selected' : 'Copy selected days'}
+                </button>
+                <button type="button" onClick={openSelectedWhatsAppDraft} disabled={selectedPlans.length === 0} className="life-primary-button px-3 py-2">
+                  <MessageCircle size={15} />
+                  WhatsApp selected days
+                </button>
+              </div>
+
+              {meals.generatedPlans.map((plan) => {
               const summary = getMealCompletionSummary(plan);
               const delta = Number(plan.summary?.deltaVsGoal || 0);
 
               return (
                 <div key={plan.id} className="life-soft-card">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div>
+                    <div className="flex items-start gap-3">
+                      <label className="mt-1 inline-flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedPlanIds.includes(plan.id)}
+                          onChange={() => toggleSelectedPlan(plan.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                        />
+                      </label>
+                      <div>
                       <p className="life-card-label">Day plan</p>
                       <h3 className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
                         {formatFriendlyDate(plan.date)}
@@ -500,6 +573,7 @@ const MealsView = ({
                       <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
                         {summary.completed}/{summary.total} meals completed
                       </p>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -603,7 +677,8 @@ const MealsView = ({
                   </div>
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </section>

@@ -1125,12 +1125,22 @@ function App() {
       })
       : null;
 
+    const fallbackPlans = generateMealPlans(dashboard.meals, { startDate, days }, {
+      profile: dashboard.profile,
+      fitness: dashboard.fitness,
+    });
+
+    const mergedPlans = fallbackPlans.map((fallbackPlan) => {
+      const aiPlan = enrichedPlans?.find((plan) => plan.date === fallbackPlan.date);
+      return aiPlan || fallbackPlan;
+    });
+
     updateDashboard((current) => ({
       ...current,
       meals: {
         ...current.meals,
         aiGuidance: Array.isArray(response?.aiGuidance) ? response.aiGuidance : current.meals.aiGuidance,
-        generatedPlans: enrichedPlans || current.meals.generatedPlans,
+        generatedPlans: mergedPlans.length ? mergedPlans : current.meals.generatedPlans,
       },
     }));
   };
