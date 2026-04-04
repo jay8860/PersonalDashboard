@@ -54,11 +54,85 @@ const sourceBadgeLabels = {
   'library-fallback': 'Library fallback',
 };
 
+const sourceBadgeLabelsHindi = {
+  ai: 'एआई दिन',
+  library: 'लाइब्रेरी दिन',
+  'library-fallback': 'लाइब्रेरी बैकअप',
+};
+
 const generationModeLabels = {
   ai: 'AI',
   'ai-partial': 'AI partial',
   library: 'Library',
   mixed: 'AI + fallback',
+};
+
+const weeklyHindiStaticMap = [
+  ['Scrambled Eggs', 'स्क्रैम्बल्ड एग्स'],
+  ['Whole Wheat Toast', 'होल व्हीट टोस्ट'],
+  ['Multigrain Toast', 'मल्टीग्रेन टोस्ट'],
+  ['Millet Idli', 'मिलेट इडली'],
+  ['Sambhar', 'सांभर'],
+  ['Vegetable Omelette', 'वेजिटेबल ऑमलेट'],
+  ['Besan Cheela', 'बेसन चीला'],
+  ['Green Moong Dosa', 'ग्रीन मूंग डोसा'],
+  ['Coconut Chutney', 'नारियल चटनी'],
+  ['Soya Chunks Pulao', 'सोया चंक्स पुलाव'],
+  ['Soya Chunks Curry', 'सोया चंक्स करी'],
+  ['Mixed Vegetable Curry', 'मिक्स वेजिटेबल करी'],
+  ['Sprouts Salad', 'स्प्राउट्स सलाद'],
+  ['Hummus', 'हुमस'],
+  ['Pita Bread', 'पीटा ब्रेड'],
+  ['Thai Green Curry', 'थाई ग्रीन करी'],
+  ['Brown Rice', 'ब्राउन राइस'],
+  ['Palak Paneer Bhurji', 'पालक पनीर भुर्जी'],
+  ['Chole (Chickpea Curry)', 'छोले'],
+  ['Pulao', 'पुलाव'],
+  ['Broccoli', 'ब्रोकोली'],
+  ['Mushroom Stir-fry', 'मशरूम स्टर-फ्राय'],
+  ['Dal Tadka', 'दाल तड़का'],
+  ['Lauki Sabzi', 'लौकी सब्जी'],
+  ['Japanese Curry', 'जापानी करी'],
+  ['Vegetable Sandwiches', 'वेजिटेबल सैंडविच'],
+  ['Millet Roti', 'मिलेट रोटी'],
+  ['Fruit', 'फल'],
+  ['Fruits', 'फल'],
+  ['Nuts', 'नट्स'],
+  ['Yogurt', 'दही'],
+  ['Roti', 'रोटी'],
+  ['Tofu', 'टोफू'],
+  ['Paneer', 'पनीर'],
+  ['Sabzi', 'सब्जी'],
+  ['Vegetables', 'सब्जियां'],
+  ['Vegetable', 'वेजिटेबल'],
+  ['Spinach', 'पालक'],
+  ['Tomato', 'टमाटर'],
+  ['Eggs', 'एग्स'],
+  ['Egg', 'एग'],
+  ['Millet', 'मिलेट'],
+  ['Oats', 'ओट्स'],
+  ['with', 'के साथ'],
+  ['and', 'और'],
+];
+
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const translateWeeklyTextToHindi = (value) => {
+  let output = String(value || '');
+  weeklyHindiStaticMap
+    .sort((left, right) => right[0].length - left[0].length)
+    .forEach(([english, hindi]) => {
+      output = output.replace(new RegExp(escapeRegExp(english), 'gi'), hindi);
+    });
+  return output || '—';
+};
+
+const formatWeeklyDateHindi = (value) => {
+  try {
+    return new Intl.DateTimeFormat('hi-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
+  } catch {
+    return value;
+  }
 };
 
 const NutritionBar = ({ label, current, target }) => (
@@ -95,6 +169,7 @@ const MealsView = ({
   const [aiError, setAiError] = useState('');
   const [swapFeedback, setSwapFeedback] = useState('');
   const [recipeEntry, setRecipeEntry] = useState(null);
+  const [weeklyViewLanguage, setWeeklyViewLanguage] = useState('english');
   const upcomingPlan = useMemo(() => getUpcomingMealPlan(meals.generatedPlans), [meals.generatedPlans]);
   const upcomingSummary = getMealCompletionSummary(upcomingPlan);
 
@@ -191,6 +266,7 @@ const MealsView = ({
   const aiProgressPct = aiGenerationProgress?.requestedDays
     ? Math.max(0, Math.min(100, Math.round(((aiGenerationProgress.generatedDays || 0) / aiGenerationProgress.requestedDays) * 100)))
     : 0;
+  const isWeeklyHindi = weeklyViewLanguage === 'hindi';
 
   return (
     <div className="space-y-6">
@@ -548,42 +624,68 @@ const MealsView = ({
           <div>
             <p className="life-card-label">Weekly view</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              See the week at a glance before you hand it to your household.
+              {isWeeklyHindi ? 'अपने घर के स्टाफ को देने से पहले पूरे हफ्ते का प्लान एक नजर में देखें।' : 'See the week at a glance before you hand it to your household.'}
             </h2>
           </div>
-          <p className="max-w-2xl text-sm leading-6 text-slate-500 dark:text-white/55">
-            Average weekly calories are computed from the first seven planned days.
-          </p>
+          <div className="flex flex-col items-start gap-3 lg:items-end">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setWeeklyViewLanguage('english')}
+                className={weeklyViewLanguage === 'english' ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeeklyViewLanguage('hindi')}
+                className={weeklyViewLanguage === 'hindi' ? 'life-tab life-tab-active whitespace-nowrap' : 'life-tab whitespace-nowrap opacity-70'}
+              >
+                Hindi
+              </button>
+            </div>
+            <p className="max-w-2xl text-sm leading-6 text-slate-500 dark:text-white/55">
+              {isWeeklyHindi ? 'औसत साप्ताहिक कैलोरी पहले सात प्लान किए गए दिनों से निकाली जाती है।' : 'Average weekly calories are computed from the first seven planned days.'}
+            </p>
+          </div>
         </div>
         <div className="mt-6 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 dark:border-white/10">
-                <th className="pb-3 pr-4">Day</th>
-                <th className="pb-3 pr-4">Source</th>
-                <th className="pb-3 pr-4">Breakfast</th>
-                <th className="pb-3 pr-4">Lunch</th>
-                <th className="pb-3 pr-4">Dinner</th>
-                <th className="pb-3 pr-0 text-right">Total kcal</th>
+                <th className="pb-3 pr-4">{isWeeklyHindi ? 'दिन' : 'Day'}</th>
+                <th className="pb-3 pr-4">{isWeeklyHindi ? 'स्रोत' : 'Source'}</th>
+                <th className="pb-3 pr-4">{isWeeklyHindi ? 'नाश्ता' : 'Breakfast'}</th>
+                <th className="pb-3 pr-4">{isWeeklyHindi ? 'सुबह का स्नैक' : 'Morning snack'}</th>
+                <th className="pb-3 pr-4">{isWeeklyHindi ? 'लंच' : 'Lunch'}</th>
+                <th className="pb-3 pr-4">{isWeeklyHindi ? 'शाम का स्नैक' : 'Evening snack'}</th>
+                <th className="pb-3 pr-4">{isWeeklyHindi ? 'डिनर' : 'Dinner'}</th>
+                <th className="pb-3 pr-0 text-right">{isWeeklyHindi ? 'कुल कैलोरी' : 'Total kcal'}</th>
               </tr>
             </thead>
             <tbody>
               {weeklySummary?.rows?.map((row) => (
                 <tr key={row.date} className="border-b border-slate-100 dark:border-white/5">
-                  <td className="py-3 pr-4">{formatFriendlyDate(row.date)}</td>
+                  <td className="py-3 pr-4">{isWeeklyHindi ? formatWeeklyDateHindi(row.date) : formatFriendlyDate(row.date)}</td>
                   <td className="py-3 pr-4">
                     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${sourceBadgeStyles[row.source || 'library'] || sourceBadgeStyles.library}`}>
-                      {sourceBadgeLabels[row.source || 'library'] || sourceBadgeLabels.library}
+                      {isWeeklyHindi
+                        ? (sourceBadgeLabelsHindi[row.source || 'library'] || sourceBadgeLabelsHindi.library)
+                        : (sourceBadgeLabels[row.source || 'library'] || sourceBadgeLabels.library)}
                     </span>
                   </td>
-                  <td className="py-3 pr-4">{row.breakfast}</td>
-                  <td className="py-3 pr-4">{row.lunch}</td>
-                  <td className="py-3 pr-4">{row.dinner}</td>
+                  <td className="py-3 pr-4">{isWeeklyHindi ? translateWeeklyTextToHindi(row.breakfast) : row.breakfast}</td>
+                  <td className="py-3 pr-4">{isWeeklyHindi ? translateWeeklyTextToHindi(row.snack1) : row.snack1}</td>
+                  <td className="py-3 pr-4">{isWeeklyHindi ? translateWeeklyTextToHindi(row.lunch) : row.lunch}</td>
+                  <td className="py-3 pr-4">{isWeeklyHindi ? translateWeeklyTextToHindi(row.snack2) : row.snack2}</td>
+                  <td className="py-3 pr-4">{isWeeklyHindi ? translateWeeklyTextToHindi(row.dinner) : row.dinner}</td>
                   <td className="py-3 pr-0 text-right">{row.totalCalories}</td>
                 </tr>
               ))}
               <tr>
-                <td className="pt-4 font-bold">Avg</td>
+                <td className="pt-4 font-bold">{isWeeklyHindi ? 'औसत' : 'Avg'}</td>
+                <td className="pt-4" />
+                <td className="pt-4" />
                 <td className="pt-4" />
                 <td className="pt-4" />
                 <td className="pt-4" />
