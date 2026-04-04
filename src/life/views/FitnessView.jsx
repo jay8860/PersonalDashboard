@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Activity, BedDouble, ChevronDown, ChevronUp, Droplets, HeartPulse, Info, Scale, TimerReset, Trash2, TrendingUp, Waves, Footprints } from 'lucide-react';
+import { Activity, Info, Scale, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   CartesianGrid,
   ComposedChart,
@@ -14,16 +14,17 @@ import {
 
 const createEntryDraft = () => ({
   date: new Date().toISOString().slice(0, 10),
-  weightKg: '',
-  bodyFatPct: '',
-  waistCm: '',
-  chestCm: '',
-  hipCm: '',
-  restingHeartRate: '',
-  steps: '',
-  sleepHours: '',
-  workoutMinutes: '',
-  waterLiters: '',
+  weightValue: '',
+  weightUnit: 'kg',
+  heightValue: '',
+  heightUnit: 'cm',
+  waistValue: '',
+  aboveNavelValue: '',
+  bicepValue: '',
+  chestValue: '',
+  hipValue: '',
+  thighValue: '',
+  bodyMeasurementUnit: 'cm',
   note: '',
 });
 
@@ -32,17 +33,40 @@ const numeric = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const formatMetric = (value, unit) => {
-  if (value == null || value === '') return 'Not set';
-  return Number(value).toFixed(1) + unit;
+const toKg = (weightValue, weightUnit) => {
+  const weight = numeric(weightValue);
+  if (weight == null) return null;
+  return weightUnit === 'lb' ? weight * 0.45359237 : weight;
 };
 
-const computeBmi = (weightKg, heightCm) => {
-  const weight = numeric(weightKg);
-  const height = numeric(heightCm);
+const toCm = (value, unit) => {
+  const parsed = numeric(value);
+  if (parsed == null) return null;
+  if (unit === 'in') return parsed * 2.54;
+  return parsed;
+};
+
+const computeBmi = (weightValue, weightUnit, heightValue, heightUnit) => {
+  const weight = toKg(weightValue, weightUnit);
+  const height = toCm(heightValue, heightUnit);
   if (weight == null || height == null || height === 0) return null;
   const meters = height / 100;
   return weight / (meters * meters);
+};
+
+const formatMeasurement = (value, unit) => {
+  const parsed = numeric(value);
+  if (parsed == null) return 'Not set';
+  return `${parsed.toFixed(1)} ${unit}`;
+};
+
+const changeSummary = (latestValue, previousValue, unit) => {
+  const latest = numeric(latestValue);
+  const previous = numeric(previousValue);
+  if (latest == null || previous == null) return 'Add one more check-in to see change.';
+  const diff = latest - previous;
+  if (Math.abs(diff) < 0.05) return `Stable vs previous (${latest.toFixed(1)} ${unit}).`;
+  return `${diff > 0 ? '+' : ''}${diff.toFixed(1)} ${unit} vs previous`;
 };
 
 const workoutSplitOptions = [
@@ -773,75 +797,61 @@ const ExerciseInfo = ({ exercise, isOpen, onToggle }) => {
 
 const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChange }) => {
   const [entryDraft, setEntryDraft] = useState(createEntryDraft());
-  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [openExerciseKey, setOpenExerciseKey] = useState('');
   const sortedEntries = [...fitness.entries].sort((left, right) => String(right.date).localeCompare(String(left.date)));
   const timelineData = [...sortedEntries].reverse().map((entry) => ({
     label: entry.date ? format(new Date(entry.date), 'dd MMM') : '',
-    weightKg: numeric(entry.weightKg),
-    bodyFatPct: numeric(entry.bodyFatPct),
-    waistCm: numeric(entry.waistCm),
-    sleepHours: numeric(entry.sleepHours),
-    steps: numeric(entry.steps),
-    workoutMinutes: numeric(entry.workoutMinutes),
-    restingHeartRate: numeric(entry.restingHeartRate),
+    weight: toKg(entry.weightValue, entry.weightUnit),
+    waist: toCm(entry.waistValue, entry.bodyMeasurementUnit),
+    aboveNavel: toCm(entry.aboveNavelValue, entry.bodyMeasurementUnit),
+    bicep: toCm(entry.bicepValue, entry.bodyMeasurementUnit),
+    chest: toCm(entry.chestValue, entry.bodyMeasurementUnit),
+    hip: toCm(entry.hipValue, entry.bodyMeasurementUnit),
+    thigh: toCm(entry.thighValue, entry.bodyMeasurementUnit),
+    bmi: computeBmi(entry.weightValue, entry.weightUnit, entry.heightValue || profile.heightCm, entry.heightUnit || 'cm'),
   }));
 
   const latest = sortedEntries[0];
   const previous = sortedEntries[1];
-  const latestWeight = numeric(latest?.weightKg);
-  const previousWeight = numeric(previous?.weightKg);
-  const weightDelta = latestWeight == null || previousWeight == null ? null : latestWeight - previousWeight;
-  const averageSleep = sortedEntries.length
-    ? sortedEntries.reduce((sum, entry) => sum + (numeric(entry.sleepHours) || 0), 0) / sortedEntries.length
-    : null;
-  const averageSteps = sortedEntries.length
-    ? Math.round(sortedEntries.reduce((sum, entry) => sum + (numeric(entry.steps) || 0), 0) / sortedEntries.length)
-    : null;
-  const averageWorkout = sortedEntries.length
-    ? Math.round(sortedEntries.reduce((sum, entry) => sum + (numeric(entry.workoutMinutes) || 0), 0) / sortedEntries.length)
-    : null;
-  const latestBmi = computeBmi(latest?.weightKg, profile.heightCm);
+  const latestWeightKg = toKg(latest?.weightValue, latest?.weightUnit);
+  const previousWeightKg = toKg(previous?.weightValue, previous?.weightUnit);
+  const latestBmi = computeBmi(latest?.weightValue, latest?.weightUnit, latest?.heightValue || profile.heightCm, latest?.heightUnit || 'cm');
   const workoutSplitType = fitness.goals.workoutSplitType || 'combined';
   const homeGymSchedule = buildHomeGymSchedule({
     splitType: workoutSplitType,
-    latestWeightKg: latest?.weightKg,
+    latestWeightKg,
   });
 
   const insights = [];
 
   if (sortedEntries.length < 3) {
-    insights.push('Add at least 3 check-ins to unlock clearer weekly trend signals.');
+    insights.push('Add at least 3 body check-ins to unlock clearer measurement trends.');
   }
 
-  const targetWeight = numeric(fitness.goals.targetWeightKg);
-  if (latestWeight == null || targetWeight == null) {
-  } else {
-    const gap = latestWeight - targetWeight;
-    if (Math.abs(gap) < 0.5) insights.push('You are very close to your target weight. Keep the current rhythm steady.');
-    else if (gap > 0) insights.push('Current weight is ' + gap.toFixed(1) + ' kg above the target. A consistent sleep and workout streak will matter more than single-day swings.');
-    else insights.push('Current weight is ' + Math.abs(gap).toFixed(1) + ' kg below the target. Double-check whether this is intentional and healthy for you.');
+  const waistNow = toCm(latest?.waistValue, latest?.bodyMeasurementUnit);
+  const waistPrev = toCm(previous?.waistValue, previous?.bodyMeasurementUnit);
+  if (waistNow != null && waistPrev != null) {
+    if (waistNow < waistPrev) insights.push(`Waist is down ${(waistPrev - waistNow).toFixed(1)} cm vs previous. That usually supports leaning-out progress.`);
+    else if (waistNow > waistPrev) insights.push(`Waist is up ${(waistNow - waistPrev).toFixed(1)} cm vs previous. Check whether this is bloat, food timing, or slipping consistency.`);
   }
 
-  const sleepTarget = numeric(fitness.goals.sleepTarget);
-  if (averageSleep == null || sleepTarget == null) {
-  } else if (averageSleep < sleepTarget) {
-    insights.push('Average sleep is ' + averageSleep.toFixed(1) + ' hours, below your ' + fitness.goals.sleepTarget + '-hour target.');
-  }
-
-  const stepTarget = numeric(fitness.goals.stepTarget);
-  if (averageSteps == null || stepTarget == null) {
-  } else if (averageSteps >= stepTarget) {
-    insights.push('Your average steps are meeting or beating the current daily target.');
-  }
-
-  const workoutTarget = numeric(fitness.goals.weeklyWorkoutMinutes);
-  if (averageWorkout == null || workoutTarget == null) {
-  } else {
-    const projectedWeekly = averageWorkout * 7;
-    if (projectedWeekly >= workoutTarget) {
-      insights.push('At the current pace, you are on track for roughly ' + String(projectedWeekly) + ' workout minutes per week.');
+  const bicepNow = toCm(latest?.bicepValue, latest?.bodyMeasurementUnit);
+  const bicepPrev = toCm(previous?.bicepValue, previous?.bodyMeasurementUnit);
+  if (bicepNow != null && bicepPrev != null && waistNow != null && waistPrev != null) {
+    if (bicepNow >= bicepPrev && waistNow <= waistPrev) {
+      insights.push('Bicep is stable or up while waist is stable or down. That is a good muscle-retention or recomposition signal.');
     }
+  }
+
+  if (latestBmi != null) {
+    if (latestBmi < 18.5) insights.push(`BMI is ${latestBmi.toFixed(1)}. Make sure your weight trend is intentional and not drifting too low.`);
+    else if (latestBmi >= 25) insights.push(`BMI is ${latestBmi.toFixed(1)}. Use waist and above-navel trend with it rather than BMI alone.`);
+  }
+
+  const upperStomachNow = toCm(latest?.aboveNavelValue, latest?.bodyMeasurementUnit);
+  const upperStomachPrev = toCm(previous?.aboveNavelValue, previous?.bodyMeasurementUnit);
+  if (upperStomachNow != null && upperStomachPrev != null && Math.abs(upperStomachNow - upperStomachPrev) >= 0.5) {
+    insights.push(`Above-navel size is ${upperStomachNow < upperStomachPrev ? 'down' : 'up'} ${Math.abs(upperStomachNow - upperStomachPrev).toFixed(1)} cm vs previous.`);
   }
 
   const handleSubmit = (event) => {
@@ -996,36 +1006,34 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[0.92fr,1.08fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.02fr,0.98fr]">
         <section className="life-panel">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="rounded-2xl bg-sky-500/12 p-3 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">
-                <Scale size={18} />
-              </div>
-              <div>
-                <p className="life-card-label">Add a check-in</p>
-                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                  Core vitals first, advanced measurements only when you need them
-                </h2>
-              </div>
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-slate-100 p-3 text-slate-700 dark:bg-white/10 dark:text-white">
+              <Scale size={18} />
             </div>
-
-            <button type="button" onClick={() => setShowAdvancedFields((current) => !current)} className="life-secondary-button">
-              {showAdvancedFields ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              {showAdvancedFields ? 'Hide advanced' : 'Show advanced'}
-            </button>
+            <div>
+              <p className="life-card-label">Body check-in</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                Keep only the measurements that matter.
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-white/55">
+                BMI is calculated automatically from your weight and height. Body measurements can be tracked in either centimeters or inches.
+              </p>
+            </div>
           </div>
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               {[
                 ['Date', 'date', 'date'],
-                ['Weight (kg)', 'weightKg', 'number'],
-                ['Waist (cm)', 'waistCm', 'number'],
-                ['Steps', 'steps', 'number'],
-                ['Sleep (hours)', 'sleepHours', 'number'],
-                ['Workout Minutes', 'workoutMinutes', 'number'],
-                ['Resting HR', 'restingHeartRate', 'number'],
+                ['Weight', 'weightValue', 'number'],
+                ['Height', 'heightValue', 'number'],
+                ['Waist', 'waistValue', 'number'],
+                ['Above navel', 'aboveNavelValue', 'number'],
+                ['Bicep', 'bicepValue', 'number'],
+                ['Chest', 'chestValue', 'number'],
+                ['Hip', 'hipValue', 'number'],
+                ['Thigh', 'thighValue', 'number'],
               ].map(([label, key, type]) => (
                 <label key={key} className="space-y-2">
                   <span className="life-card-label">{label}</span>
@@ -1037,93 +1045,111 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
                   />
                 </label>
               ))}
+              <label className="space-y-2">
+                <span className="life-card-label">Weight unit</span>
+                <select
+                  value={entryDraft.weightUnit}
+                  onChange={(event) => setEntryDraft((current) => ({ ...current, weightUnit: event.target.value }))}
+                  className="life-input"
+                >
+                  <option value="kg">kg</option>
+                  <option value="lb">lb</option>
+                </select>
+              </label>
+              <label className="space-y-2">
+                <span className="life-card-label">Height unit</span>
+                <select
+                  value={entryDraft.heightUnit}
+                  onChange={(event) => setEntryDraft((current) => ({ ...current, heightUnit: event.target.value }))}
+                  className="life-input"
+                >
+                  <option value="cm">cm</option>
+                  <option value="in">in</option>
+                </select>
+              </label>
+              <label className="space-y-2">
+                <span className="life-card-label">Body measurement unit</span>
+                <select
+                  value={entryDraft.bodyMeasurementUnit}
+                  onChange={(event) => setEntryDraft((current) => ({ ...current, bodyMeasurementUnit: event.target.value }))}
+                  className="life-input"
+                >
+                  <option value="cm">cm</option>
+                  <option value="in">in</option>
+                </select>
+              </label>
             </div>
-            {showAdvancedFields ? (
-              <div className="grid gap-4 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-[#090909] md:grid-cols-2">
-                {[
-                  ['Body Fat (%)', 'bodyFatPct', 'number'],
-                  ['Chest (cm)', 'chestCm', 'number'],
-                  ['Hip (cm)', 'hipCm', 'number'],
-                  ['Water (liters)', 'waterLiters', 'number'],
-                ].map(([label, key, type]) => (
-                  <label key={key} className="space-y-2">
-                    <span className="life-card-label">{label}</span>
-                    <input
-                      type={type}
-                      value={entryDraft[key]}
-                      onChange={(event) => setEntryDraft((current) => ({ ...current, [key]: event.target.value }))}
-                      className="life-input"
-                    />
-                  </label>
-                ))}
-              </div>
-            ) : null}
             <label className="space-y-2">
               <span className="life-card-label">Notes</span>
               <textarea
                 value={entryDraft.note}
                 onChange={(event) => setEntryDraft((current) => ({ ...current, note: event.target.value }))}
                 rows={3}
-                placeholder="Workout quality, soreness, food notes, stress, travel, or anything important..."
+                placeholder="Anything relevant about body changes, bloating, pump, or consistency..."
                 className="life-textarea"
               />
             </label>
             <button type="submit" className="life-primary-button w-full justify-center">
-              Save check-in
+              Save body check-in
             </button>
           </form>
         </section>
 
         <section className="life-panel">
-          <div className="flex items-start gap-3">
-            <div className="rounded-2xl bg-slate-100 p-3 text-slate-700 dark:bg-white/10 dark:text-white">
-              <TrendingUp size={18} />
-            </div>
-            <div>
-              <p className="life-card-label">Targets</p>
-              <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                Keep your current targets visible.
-              </h3>
-            </div>
-          </div>
+          <p className="life-card-label">Latest snapshot</p>
+          <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            See what changed from the previous check-in.
+          </h3>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             {[
-              ['Target Weight (kg)', 'targetWeightKg'],
-              ['Weekly Workout Minutes', 'weeklyWorkoutMinutes'],
-              ['Daily Step Target', 'stepTarget'],
-              ['Sleep Target (hours)', 'sleepTarget'],
-              ['Workout split', 'workoutSplitType'],
-            ].map(([label, key]) => (
-              <label key={key} className="space-y-2">
-                <span className="life-card-label">{label}</span>
-                {key === 'workoutSplitType' ? (
-                  <select
-                    value={fitness.goals[key]}
-                    onChange={(event) => onGoalsChange(key, event.target.value)}
-                    className="life-input"
-                  >
-                    {workoutSplitOptions.map((option) => (
-                      <option key={option.id} value={option.id}>{option.label}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="number"
-                    value={fitness.goals[key]}
-                    onChange={(event) => onGoalsChange(key, event.target.value)}
-                    className="life-input"
-                  />
-                )}
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {[
-              { title: 'Latest weight', value: formatMetric(latest?.weightKg, ' kg'), help: weightDelta == null ? 'Add more than one entry to see the change.' : (weightDelta > 0 ? '+' : '') + weightDelta.toFixed(1) + ' kg vs previous', icon: Scale },
-              { title: 'Latest BMI', value: latestBmi ? latestBmi.toFixed(1) : 'Not set', help: profile.heightCm ? 'Based on height ' + profile.heightCm + ' cm' : 'Add your height in About Me for BMI.', icon: Activity },
-              { title: 'Avg sleep', value: averageSleep ? averageSleep.toFixed(1) + ' h' : 'Not set', help: 'Average across your stored check-ins', icon: BedDouble },
-              { title: 'Avg steps', value: averageSteps ? averageSteps.toLocaleString() : 'Not set', help: 'Average daily steps from your entries', icon: Footprints },
+              {
+                title: 'Weight',
+                value: latest ? formatMeasurement(latest.weightValue, latest.weightUnit) : 'Not set',
+                help: latest ? changeSummary(latest.weightValue, previous?.weightValue, latest.weightUnit) : 'Add a check-in to start tracking.',
+                icon: Scale,
+              },
+              {
+                title: 'BMI',
+                value: latestBmi ? latestBmi.toFixed(1) : 'Not set',
+                help: latest?.heightValue || profile.heightCm ? 'Calculated automatically from your saved height and weight.' : 'Add height once to unlock BMI.',
+                icon: Activity,
+              },
+              {
+                title: 'Waist',
+                value: latest ? formatMeasurement(latest.waistValue, latest.bodyMeasurementUnit) : 'Not set',
+                help: latest ? changeSummary(latest.waistValue, previous?.waistValue, latest.bodyMeasurementUnit || 'cm') : 'Add a check-in to start tracking.',
+                icon: latest && previous && numeric(latest.waistValue) < numeric(previous?.waistValue) ? TrendingDown : TrendingUp,
+              },
+              {
+                title: 'Bicep',
+                value: latest ? formatMeasurement(latest.bicepValue, latest.bodyMeasurementUnit) : 'Not set',
+                help: latest ? changeSummary(latest.bicepValue, previous?.bicepValue, latest.bodyMeasurementUnit || 'cm') : 'Add a check-in to start tracking.',
+                icon: latest && previous && numeric(latest.bicepValue) >= numeric(previous?.bicepValue) ? TrendingUp : Activity,
+              },
+              {
+                title: 'Above navel',
+                value: latest ? formatMeasurement(latest.aboveNavelValue, latest.bodyMeasurementUnit) : 'Not set',
+                help: latest ? changeSummary(latest.aboveNavelValue, previous?.aboveNavelValue, latest.bodyMeasurementUnit || 'cm') : 'Add a check-in to start tracking.',
+                icon: Activity,
+              },
+              {
+                title: 'Chest',
+                value: latest ? formatMeasurement(latest.chestValue, latest.bodyMeasurementUnit) : 'Not set',
+                help: latest ? changeSummary(latest.chestValue, previous?.chestValue, latest.bodyMeasurementUnit || 'cm') : 'Add a check-in to start tracking.',
+                icon: Activity,
+              },
+              {
+                title: 'Hip',
+                value: latest ? formatMeasurement(latest.hipValue, latest.bodyMeasurementUnit) : 'Not set',
+                help: latest ? changeSummary(latest.hipValue, previous?.hipValue, latest.bodyMeasurementUnit || 'cm') : 'Add a check-in to start tracking.',
+                icon: Activity,
+              },
+              {
+                title: 'Thigh',
+                value: latest ? formatMeasurement(latest.thighValue, latest.bodyMeasurementUnit) : 'Not set',
+                help: latest ? changeSummary(latest.thighValue, previous?.thighValue, latest.bodyMeasurementUnit || 'cm') : 'Add a check-in to start tracking.',
+                icon: Activity,
+              },
             ].map((card) => (
               <div key={card.title} className="life-soft-card">
                 <div className="flex items-start justify-between gap-4">
@@ -1145,8 +1171,10 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
       <div className="grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
         <section className="life-panel">
           <div>
-            <p className="life-card-label">Body trends</p>
-            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Weight, waist, and body-fat trend</h3>
+            <p className="life-card-label">Measurement trends</p>
+            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              Weight, waist, above navel, and bicep over time
+            </h3>
           </div>
           <div className="mt-6 h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -1162,51 +1190,23 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
                     borderRadius: '18px',
                   }}
                 />
-                <Line yAxisId="weight" type="monotone" dataKey="weightKg" stroke="#0f766e" strokeWidth={3} dot={{ r: 3 }} />
-                <Line yAxisId="body" type="monotone" dataKey="bodyFatPct" stroke="#f97316" strokeWidth={2.5} dot={{ r: 2 }} />
-                <Bar yAxisId="body" dataKey="waistCm" fill="rgba(59, 130, 246, 0.28)" radius={[10, 10, 0, 0]} />
+                <Line yAxisId="weight" type="monotone" dataKey="weight" stroke="#0f766e" strokeWidth={3} dot={{ r: 3 }} />
+                <Line yAxisId="body" type="monotone" dataKey="waist" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 2 }} />
+                <Line yAxisId="body" type="monotone" dataKey="aboveNavel" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 2 }} />
+                <Bar yAxisId="body" dataKey="bicep" fill="rgba(168, 85, 247, 0.24)" radius={[10, 10, 0, 0]} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
         </section>
 
-        <section className="life-panel">
-          <div>
-            <p className="life-card-label">Recovery and activity</p>
-            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Sleep, steps, and workout load</h3>
-          </div>
-          <div className="mt-6 h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={timelineData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.18)" />
-                <XAxis dataKey="label" stroke="rgba(100, 116, 139, 0.6)" />
-                <YAxis yAxisId="activity" stroke="rgba(100, 116, 139, 0.6)" />
-                <YAxis yAxisId="sleep" orientation="right" stroke="rgba(100, 116, 139, 0.6)" />
-                <Tooltip
-                  contentStyle={{
-                    background: 'rgba(15, 23, 42, 0.92)',
-                    border: '1px solid rgba(148, 163, 184, 0.16)',
-                    borderRadius: '18px',
-                  }}
-                />
-                <Bar yAxisId="activity" dataKey="steps" fill="rgba(6, 182, 212, 0.35)" radius={[10, 10, 0, 0]} />
-                <Line yAxisId="sleep" type="monotone" dataKey="sleepHours" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 2 }} />
-                <Line yAxisId="activity" type="monotone" dataKey="workoutMinutes" stroke="#7c3aed" strokeWidth={2.5} dot={{ r: 2 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
         <section className="life-panel">
           <p className="life-card-label">Insights</p>
-          <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Quick read of your current trajectory</h3>
+          <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">What to work on next</h3>
           <div className="mt-6 grid gap-4">
             {insights.length === 0 ? (
               <div className="life-soft-card">
                 <p className="text-sm leading-6 text-slate-500 dark:text-white/55">
-                  Add a few more entries or set your targets to generate specific observations here.
+                  Add a few body check-ins to get more useful pattern recognition here.
                 </p>
               </div>
             ) : (
@@ -1217,59 +1217,49 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
               ))
             )}
           </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {[
-              { title: 'Resting HR', value: formatMetric(latest?.restingHeartRate, ' bpm'), icon: HeartPulse },
-              { title: 'Water', value: formatMetric(latest?.waterLiters, ' L'), icon: Droplets },
-              { title: 'Workout minutes', value: latest?.workoutMinutes ? latest.workoutMinutes + ' min' : 'Not set', icon: TimerReset },
-              { title: 'Sleep hours', value: latest?.sleepHours ? latest.sleepHours + ' h' : 'Not set', icon: Waves },
-            ].map((card) => (
-              <div key={card.title} className="life-soft-card">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="life-card-label">{card.title}</p>
-                    <p className="mt-2 text-xl font-black text-slate-900 dark:text-white">{card.value}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-100 p-3 text-slate-700 dark:bg-white/10 dark:text-white">
-                    <card.icon size={18} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </section>
+      </div>
 
-        <section className="life-panel">
-          <p className="life-card-label">Recent entries</p>
-          <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Your latest measurement history</h3>
-          <div className="mt-6 overflow-x-auto">
-            <table className="data-table">
-              <thead>
+      <section className="life-panel">
+        <p className="life-card-label">Recent entries</p>
+        <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Your latest body measurements</h3>
+        <div className="mt-6 overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Weight</th>
+                <th>Height</th>
+                <th>BMI</th>
+                <th>Waist</th>
+                <th>Above navel</th>
+                <th>Bicep</th>
+                <th>Chest</th>
+                <th>Hip</th>
+                <th>Thigh</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedEntries.length === 0 ? (
                 <tr>
-                  <th>Date</th>
-                  <th>Weight</th>
-                  <th>Waist</th>
-                  <th>Sleep</th>
-                  <th>Steps</th>
-                  <th>Workout</th>
-                  <th />
+                  <td colSpan="11" className="text-center text-slate-500 dark:text-white/50">No body check-ins yet.</td>
                 </tr>
-              </thead>
-              <tbody>
-                {sortedEntries.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="text-center text-slate-500 dark:text-white/50">No fitness data yet.</td>
-                  </tr>
-                ) : (
-                  sortedEntries.map((entry) => (
+              ) : (
+                sortedEntries.map((entry) => {
+                  const bmi = computeBmi(entry.weightValue, entry.weightUnit, entry.heightValue || profile.heightCm, entry.heightUnit || 'cm');
+                  return (
                     <tr key={entry.id}>
                       <td>{entry.date ? format(new Date(entry.date), 'dd MMM yyyy') : 'No date'}</td>
-                      <td>{entry.weightKg ? entry.weightKg + ' kg' : '—'}</td>
-                      <td>{entry.waistCm ? entry.waistCm + ' cm' : '—'}</td>
-                      <td>{entry.sleepHours ? entry.sleepHours + ' h' : '—'}</td>
-                      <td>{entry.steps || '—'}</td>
-                      <td>{entry.workoutMinutes ? entry.workoutMinutes + ' min' : '—'}</td>
+                      <td>{entry.weightValue ? `${entry.weightValue} ${entry.weightUnit}` : '—'}</td>
+                      <td>{entry.heightValue ? `${entry.heightValue} ${entry.heightUnit}` : (profile.heightCm ? `${profile.heightCm} cm` : '—')}</td>
+                      <td>{bmi ? bmi.toFixed(1) : '—'}</td>
+                      <td>{entry.waistValue ? `${entry.waistValue} ${entry.bodyMeasurementUnit}` : '—'}</td>
+                      <td>{entry.aboveNavelValue ? `${entry.aboveNavelValue} ${entry.bodyMeasurementUnit}` : '—'}</td>
+                      <td>{entry.bicepValue ? `${entry.bicepValue} ${entry.bodyMeasurementUnit}` : '—'}</td>
+                      <td>{entry.chestValue ? `${entry.chestValue} ${entry.bodyMeasurementUnit}` : '—'}</td>
+                      <td>{entry.hipValue ? `${entry.hipValue} ${entry.bodyMeasurementUnit}` : '—'}</td>
+                      <td>{entry.thighValue ? `${entry.thighValue} ${entry.bodyMeasurementUnit}` : '—'}</td>
                       <td className="text-right">
                         <button
                           type="button"
@@ -1280,13 +1270,13 @@ const FitnessView = ({ fitness, profile, onAddEntry, onDeleteEntry, onGoalsChang
                         </button>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 };

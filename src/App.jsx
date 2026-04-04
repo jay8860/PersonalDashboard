@@ -1771,16 +1771,17 @@ function App() {
       if (!quickAddDraft.date) return;
       addFitnessEntry({
         date: quickAddDraft.date,
-        weightKg: quickAddDraft.weightKg,
-        bodyFatPct: '',
-        waistCm: '',
-        chestCm: '',
-        hipCm: '',
-        restingHeartRate: '',
-        steps: '',
-        sleepHours: '',
-        workoutMinutes: '',
-        waterLiters: '',
+        weightValue: quickAddDraft.weightKg,
+        weightUnit: 'kg',
+        heightValue: dashboard.profile.heightCm || '',
+        heightUnit: 'cm',
+        waistValue: '',
+        aboveNavelValue: '',
+        bicepValue: '',
+        chestValue: '',
+        hipValue: '',
+        thighValue: '',
+        bodyMeasurementUnit: 'cm',
         note: quickAddDraft.notes,
       });
       changeTab('fitness');
