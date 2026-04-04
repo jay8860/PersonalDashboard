@@ -766,10 +766,10 @@ export const generateMealPlans = (meals, options = {}, context = {}) => {
           });
 
         if (selectedMeal?.meal) recentMealIds.unshift(selectedMeal.meal.id);
-        if (recentMealIds.length > 8) recentMealIds.pop();
+        if (recentMealIds.length > 14) recentMealIds.pop();
         if (!selectedMeal?.meal && mealEntry?.dishName) {
           recentFallbackNames[slot.id].unshift(mealEntry.dishName);
-          if (recentFallbackNames[slot.id].length > 4) recentFallbackNames[slot.id].pop();
+          if (recentFallbackNames[slot.id].length > 7) recentFallbackNames[slot.id].pop();
         }
 
         return [slot.id, mealEntry];

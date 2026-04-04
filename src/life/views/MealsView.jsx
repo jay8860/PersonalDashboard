@@ -9,7 +9,6 @@ import {
   MessageCircle,
   RefreshCcw,
   Replace,
-  ShoppingBasket,
   Sparkles,
 } from 'lucide-react';
 import { formatFriendlyDate } from '../dashboardData.js';
@@ -80,7 +79,6 @@ const MealsView = ({
   eligibleMeals,
   aiGenerationProgress,
   weeklySummary,
-  shoppingList,
   goalProgress,
   nutritionProgress,
   onUpdateMeals,
@@ -429,10 +427,10 @@ const MealsView = ({
             <SummaryPill label="Mode" value={generationModeLabels[generationMeta.mode] || 'Library'} />
             <SummaryPill label="Requested days" value={String(generationMeta.requestedDays || meals.planLengthDays || 0)} />
             <SummaryPill label="AI days" value={String(generationMeta.aiDays || 0)} />
-            <SummaryPill label="Missing days" value={String(generationMeta.missingDays || 0)} />
+            <SummaryPill label={generationMeta.fallbackDays ? 'Fallback days' : 'Missing days'} value={String(generationMeta.fallbackDays || generationMeta.missingDays || 0)} />
           </div>
           <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-white/60">
-            The likely reason AI was only returning a few days before is that the old flow asked Gemini for one very large strict-JSON response for the entire 7, 14, or 30-day plan. Large structured outputs often get truncated or partially malformed, so only the first few valid days survived parsing. The new flow generates smaller AI batches and retries missing dates individually.
+            The planner now generates in 7-day AI windows so the model can maintain stronger weekly variety. If some later dates still fail after AI retries, only those dates are filled by the local meal engine, which now also keeps a longer diversity memory for more practical fallback plans.
           </p>
         </div>
 
@@ -594,32 +592,6 @@ const MealsView = ({
               </tr>
             </tbody>
           </table>
-        </div>
-      </section>
-
-      <section className="life-panel">
-        <div className="flex items-start gap-3">
-          <div className="rounded-2xl bg-amber-500/12 p-3 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">
-            <ShoppingBasket size={18} />
-          </div>
-          <div>
-            <p className="life-card-label">Shopping list</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Approximate ingredient list for the week.
-            </h2>
-          </div>
-        </div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {shoppingList?.length ? shoppingList.map((item) => (
-            <div key={item.name} className="life-soft-card">
-              <p className="text-base font-bold capitalize text-slate-900 dark:text-white">{item.name}</p>
-              <p className="mt-2 text-sm text-slate-500 dark:text-white/55">{item.quantity} {item.unit}</p>
-            </div>
-          )) : (
-            <div className="life-soft-card">
-              <p className="text-sm leading-6 text-slate-600 dark:text-white/65">Generate at least one week to see a shopping list.</p>
-            </div>
-          )}
         </div>
       </section>
 

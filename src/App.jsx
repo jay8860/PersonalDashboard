@@ -45,7 +45,6 @@ import {
   buildGoalProgress,
   buildEligibleMealCatalog,
   buildNutritionProgress,
-  buildShoppingList,
   buildWeeklyMealSummary,
   calculateCalorieTargets,
   generateMealPlans,
@@ -91,7 +90,7 @@ let portalBootstrapCache = null;
 
 const shiftIsoDate = (isoDate, offsetDays) => format(addDays(parseISO(isoDate), offsetDays), 'yyyy-MM-dd');
 
-const summarizeRecentPlansForAi = (plans = []) => plans.slice(-5).map((plan) => ({
+const summarizeRecentPlansForAi = (plans = []) => plans.slice(-7).map((plan) => ({
   date: plan.date,
   meals: {
     breakfast: plan.meals?.breakfast?.dishName || '',
@@ -1156,7 +1155,7 @@ function App() {
 
   const generateAiBackedMealPlans = async ({ startDate, days }) => {
     const requestedDays = [7, 14, 30].includes(Number(days)) ? Number(days) : Number(dashboard.meals.planLengthDays) || 7;
-    const chunkSize = requestedDays >= 14 ? 3 : 2;
+    const chunkSize = Math.min(7, requestedDays);
     const totalBatches = Math.ceil(requestedDays / chunkSize);
     const eligibleMeals = buildEligibleMealCatalog({
       mealsState: dashboard.meals,
@@ -1326,21 +1325,37 @@ function App() {
         refinedPlans.push(plan);
       }
 
+      const completeDateList = Array.from({ length: requestedDays }, (_, index) => shiftIsoDate(startDate, index));
+      const refinedDateSet = new Set(refinedPlans.map((plan) => plan.date));
+      const missingDates = completeDateList.filter((date) => !refinedDateSet.has(date));
+      let finalPlans = [...refinedPlans];
+
+      if (missingDates.length) {
+        const fallbackPlans = generateMealPlans(dashboard.meals, { startDate, days: requestedDays }, {
+          profile: dashboard.profile,
+          fitness: dashboard.fitness,
+        })
+          .map((plan) => ({ ...plan, source: 'library-fallback' }))
+          .filter((plan) => missingDates.includes(plan.date));
+
+        finalPlans = [...refinedPlans, ...fallbackPlans].sort((left, right) => String(left.date).localeCompare(String(right.date)));
+      }
+
       updateDashboard((current) => ({
         ...current,
         meals: {
           ...current.meals,
           aiGuidance: aggregatedGuidance.length ? aggregatedGuidance : current.meals.aiGuidance,
           generationMeta: {
-            mode: refinedPlans.length < requestedDays ? 'ai-partial' : 'ai',
+            mode: missingDates.length ? 'mixed' : 'ai',
             requestedDays,
             aiDays: refinedPlans.length,
-            fallbackDays: 0,
+            fallbackDays: missingDates.length,
             aiReturnedDays,
-            missingDays: Math.max(0, requestedDays - refinedPlans.length),
+            missingDays: 0,
             lastRunAt: new Date().toISOString(),
           },
-          generatedPlans: refinedPlans,
+          generatedPlans: finalPlans,
         },
       }));
 
@@ -1350,8 +1365,8 @@ function App() {
         generatedDays: refinedPlans.length,
         totalBatches,
         completedBatches: totalBatches,
-        status: refinedPlans.length < requestedDays
-          ? `AI generated ${refinedPlans.length} of ${requestedDays} days. ${requestedDays - refinedPlans.length} days are still missing.`
+        status: missingDates.length
+          ? `AI generated ${refinedPlans.length} of ${requestedDays} days. ${missingDates.length} days were filled with library fallback.`
           : `AI generated all ${requestedDays} requested days.`,
       });
     } catch (error) {
@@ -1807,7 +1822,6 @@ function App() {
             eligibleMeals={eligibleMealCatalog}
             aiGenerationProgress={aiGenerationProgress}
             weeklySummary={buildWeeklyMealSummary(dashboard.meals.generatedPlans)}
-            shoppingList={buildShoppingList(dashboard.meals.generatedPlans)}
             goalProgress={buildGoalProgress(dashboard.meals.generatedPlans)}
             nutritionProgress={buildNutritionProgress(upcomingMealPlan)}
             onUpdateMeals={updateMeals}
