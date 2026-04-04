@@ -920,9 +920,25 @@ export const buildEligibleMealCatalog = ({ mealsState, profile, fitness, perSlot
   return Object.fromEntries(
     mealSlotDefinitions.map((slot) => {
       const targetCalories = roundToFive(targets.goalCalories * (targets.mealDistribution[slot.id] || 0));
-      const eligible = mealDatabase
+      const eligiblePool = mealDatabase
         .filter((meal) => mealMatchesFilters({ meal, slotId: slot.id, availableIngredients, excludedIngredients }))
-        .sort((left, right) => Math.abs(left.calories - targetCalories) - Math.abs(right.calories - targetCalories))
+        .sort((left, right) => Math.abs(left.calories - targetCalories) - Math.abs(right.calories - targetCalories));
+
+      const signatureSet = new Set();
+      const diversified = [];
+      eligiblePool.forEach((meal) => {
+        const signature = [
+          canonicalize(meal.primaryIngredients?.[0] || ''),
+          canonicalize(meal.primaryIngredients?.[1] || ''),
+          meal.tags?.[0] || '',
+        ].filter(Boolean).join('|');
+        if (!signature || signatureSet.has(signature) || diversified.length >= perSlot) return;
+        signatureSet.add(signature);
+        diversified.push(meal);
+      });
+
+      const fallbackFill = eligiblePool.filter((meal) => !diversified.includes(meal)).slice(0, Math.max(0, perSlot - diversified.length));
+      const eligible = [...diversified, ...fallbackFill]
         .slice(0, perSlot)
         .map((meal) => ({
           id: meal.id,
@@ -932,6 +948,8 @@ export const buildEligibleMealCatalog = ({ mealsState, profile, fitness, perSlot
           carbs: meal.carbs,
           fat: meal.fat,
           ingredients: meal.ingredients,
+          primaryIngredients: meal.primaryIngredients,
+          tags: meal.tags,
           description: meal.description,
         }));
 

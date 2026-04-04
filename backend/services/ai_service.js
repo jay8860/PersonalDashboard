@@ -153,7 +153,7 @@ async function analyzeReport(filePath, mimeType) {
   return extractJson(response.text());
 }
 
-async function generateMealPlanWithAI({ meals, profile, fitness, eligibleMeals = {}, options = {} }) {
+async function generateMealPlanWithAI({ meals, profile, fitness, eligibleMeals = {}, recentPlans = [], options = {} }) {
   const { model } = requireClient();
   const requestedDays = [7, 14, 30].includes(Number(options.days)) ? Number(options.days) : 30;
   const startDate = String(options.startDate || new Date().toISOString().slice(0, 10));
@@ -164,6 +164,7 @@ async function generateMealPlanWithAI({ meals, profile, fitness, eligibleMeals =
     excludedItems: Array.isArray(meals?.excludedItems) ? meals.excludedItems : [],
     mealRules: meals?.mealRules || {},
   };
+  const avoidDishesBySlot = options?.avoidDishesBySlot || {};
   const prompt = `
 You are designing a vegetarian-with-eggs meal plan for a personal dashboard.
 
@@ -184,6 +185,8 @@ ${JSON.stringify({
     latestWeightKg: latestEntry?.weightKg || 86,
     meals: compactMealsContext,
     eligibleMeals,
+    recentPlans: Array.isArray(recentPlans) ? recentPlans : [],
+    avoidDishesBySlot,
     options: { startDate, days: requestedDays },
   }, null, 2)}
 
@@ -192,9 +195,15 @@ Instructions:
 - Use mandatory items for each slot whenever possible.
 - Use flexible items and example meals to create variety.
 - Prefer choosing from the eligible meal library provided in the context whenever possible.
+- Use the recentPlans context as a hard anti-repetition guide for upcoming days.
+- Respect avoidDishesBySlot strongly for the requested dates whenever a reasonable alternative exists.
 - Favor lean-muscle, high-protein, moderate-carb choices.
 - Think in complete meals, not just ingredient lists.
 - Do not repeat the same raw material list across every meal.
+- Do not repeat the same breakfast, lunch, or dinner dish on consecutive days.
+- Across a 7-day span, aim for at least 4 distinct breakfasts, 4 distinct lunches, and 4 distinct dinners when ingredients allow.
+- Do not keep using the same primary protein or same lead vegetable day after day if other eligible choices exist.
+- If two dishes are similar, prefer the one using different raw materials from the recentPlans context.
 - If the user weighs around 86 kg, make portions explicit enough to support roughly 130-150 g protein across the day unless the user data suggests otherwise.
 - Suggest realistic portion guidance in household language like "3 eggs", "150 g paneer", "1 bowl", "2 chapatis".
 - Keep meals practical for home preparation in India.

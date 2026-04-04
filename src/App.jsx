@@ -91,6 +91,43 @@ let portalBootstrapCache = null;
 
 const shiftIsoDate = (isoDate, offsetDays) => format(addDays(parseISO(isoDate), offsetDays), 'yyyy-MM-dd');
 
+const summarizeRecentPlansForAi = (plans = []) => plans.slice(-5).map((plan) => ({
+  date: plan.date,
+  meals: {
+    breakfast: plan.meals?.breakfast?.dishName || '',
+    lunch: plan.meals?.lunch?.dishName || '',
+    dinner: plan.meals?.dinner?.dishName || '',
+    snack1: plan.meals?.snack1?.dishName || '',
+    snack2: plan.meals?.snack2?.dishName || '',
+  },
+}));
+
+const majorMealSlots = ['breakfast', 'lunch', 'dinner'];
+
+const buildAvoidDishesBySlot = (plans = []) => Object.fromEntries(
+  majorMealSlots.map((slotId) => [
+    slotId,
+    [...new Set(
+      plans
+        .slice(-3)
+        .map((plan) => plan.meals?.[slotId]?.dishName || '')
+        .filter(Boolean),
+    )],
+  ]),
+);
+
+const countRecentDishUsage = (plans = [], slotId, dishName) => (
+  plans.filter((plan) => String(plan.meals?.[slotId]?.dishName || '').trim() === String(dishName || '').trim()).length
+);
+
+const needsVarietyRetry = (plan, previousPlans = []) => majorMealSlots.some((slotId) => {
+  const dishName = String(plan.meals?.[slotId]?.dishName || '').trim();
+  if (!dishName) return false;
+  const previousDayDish = previousPlans.at(-1)?.meals?.[slotId]?.dishName || '';
+  if (dishName === previousDayDish) return true;
+  return countRecentDishUsage(previousPlans, slotId, dishName) >= 2;
+});
+
 const tabItems = [
   { id: 'home', label: 'Home', icon: LayoutDashboard },
   { id: 'meals', label: 'Meals', icon: Apple },
@@ -1125,7 +1162,7 @@ function App() {
       mealsState: dashboard.meals,
       profile: dashboard.profile,
       fitness: dashboard.fitness,
-      perSlot: 10,
+      perSlot: 18,
     });
     const targets = calculateCalorieTargets({
       meals: dashboard.meals,
@@ -1184,6 +1221,7 @@ function App() {
           profile: dashboard.profile,
           fitness: dashboard.fitness,
           eligibleMeals,
+          recentPlans: summarizeRecentPlansForAi(aggregatedPlans),
           options: { startDate: chunkStartDate, days: chunkDays },
         });
 
@@ -1213,6 +1251,7 @@ function App() {
             profile: dashboard.profile,
             fitness: dashboard.fitness,
             eligibleMeals,
+            recentPlans: summarizeRecentPlansForAi(aggregatedPlans),
             options: { startDate: missingDate, days: 1 },
           });
 
@@ -1248,32 +1287,71 @@ function App() {
         throw new Error('AI could not generate any complete day plans. This usually happens when one large JSON response gets truncated or partially structured.');
       }
 
+      const refinedPlans = [];
+      for (const plan of sortedPlans) {
+        if (!needsVarietyRetry(plan, refinedPlans)) {
+          refinedPlans.push(plan);
+          continue;
+        }
+
+        setAiGenerationProgress((current) => ({
+          ...current,
+          active: true,
+          status: `Improving variety for ${plan.date}...`,
+        }));
+
+        try {
+          const retryResponse = await generateAiMealPlan({
+            meals: dashboard.meals,
+            profile: dashboard.profile,
+            fitness: dashboard.fitness,
+            eligibleMeals,
+            recentPlans: summarizeRecentPlansForAi(refinedPlans),
+            options: {
+              startDate: plan.date,
+              days: 1,
+              avoidDishesBySlot: buildAvoidDishesBySlot(refinedPlans),
+            },
+          });
+
+          const retriedPlan = enrichPlans(retryResponse?.generatedPlans || [])[0];
+          if (retriedPlan) {
+            refinedPlans.push(retriedPlan);
+            continue;
+          }
+        } catch {
+          // Keep the original plan if the refinement attempt fails.
+        }
+
+        refinedPlans.push(plan);
+      }
+
       updateDashboard((current) => ({
         ...current,
         meals: {
           ...current.meals,
           aiGuidance: aggregatedGuidance.length ? aggregatedGuidance : current.meals.aiGuidance,
           generationMeta: {
-            mode: sortedPlans.length < requestedDays ? 'ai-partial' : 'ai',
+            mode: refinedPlans.length < requestedDays ? 'ai-partial' : 'ai',
             requestedDays,
-            aiDays: sortedPlans.length,
+            aiDays: refinedPlans.length,
             fallbackDays: 0,
             aiReturnedDays,
-            missingDays: Math.max(0, requestedDays - sortedPlans.length),
+            missingDays: Math.max(0, requestedDays - refinedPlans.length),
             lastRunAt: new Date().toISOString(),
           },
-          generatedPlans: sortedPlans,
+          generatedPlans: refinedPlans,
         },
       }));
 
       setAiGenerationProgress({
         active: false,
         requestedDays,
-        generatedDays: sortedPlans.length,
+        generatedDays: refinedPlans.length,
         totalBatches,
         completedBatches: totalBatches,
-        status: sortedPlans.length < requestedDays
-          ? `AI generated ${sortedPlans.length} of ${requestedDays} days. ${requestedDays - sortedPlans.length} days are still missing.`
+        status: refinedPlans.length < requestedDays
+          ? `AI generated ${refinedPlans.length} of ${requestedDays} days. ${requestedDays - refinedPlans.length} days are still missing.`
           : `AI generated all ${requestedDays} requested days.`,
       });
     } catch (error) {
