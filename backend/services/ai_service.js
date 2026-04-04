@@ -57,7 +57,7 @@ const normalizeMealsResponse = (payload, options = {}) => {
   const days = Number(options.days) || 30;
 
   return {
-    aiGuidance: normalizeStringList(payload?.aiGuidance),
+    aiGuidance: normalizeStringList(payload?.aiGuidance).slice(0, 3),
     generatedPlans: (Array.isArray(payload?.generatedPlans) ? payload.generatedPlans : []).slice(0, days).map((plan, dayIndex) => ({
       id: String(plan?.id || `ai-plan-${dayIndex + 1}`),
       date: String(plan?.date || ''),
@@ -209,10 +209,11 @@ Instructions:
 - Keep meals practical for home preparation in India.
 - Give concise prep notes that can be shared with house staff or family.
 - Do not include medical claims or extreme dieting advice.
+- Return at most 3 aiGuidance points.
 
     Return valid JSON only in this exact shape:
 {
-  "aiGuidance": ["short strategy note", "short strategy note"],
+  "aiGuidance": ["short strategy note", "short strategy note", "short strategy note"],
   "generatedPlans": [
     {
       "date": "YYYY-MM-DD",

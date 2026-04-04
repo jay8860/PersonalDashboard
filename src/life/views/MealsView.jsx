@@ -536,7 +536,7 @@ const MealsView = ({
             Strategy notes generated around your calorie and ingredient setup.
           </h2>
           <div className="mt-6 grid gap-3">
-            {meals.aiGuidance.map((item) => (
+            {meals.aiGuidance.slice(0, 3).map((item) => (
               <div key={item} className="life-soft-card">
                 <p className="text-sm leading-6 text-slate-700 dark:text-white/75">{item}</p>
               </div>
