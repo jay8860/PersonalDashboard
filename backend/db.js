@@ -93,6 +93,14 @@ const createTablesSqlite = async () => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
   );
+  // Indexes for common query patterns
+  await run(`CREATE INDEX IF NOT EXISTS idx_health_data_created_at ON health_data(created_at DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_health_data_type ON health_data(type)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_daily_notes_created_at ON daily_notes(created_at DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_medical_timeline_event_date ON medical_timeline(event_date DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_medical_timeline_created_at ON medical_timeline(created_at DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_body_measurements_event_date ON body_measurements(event_date DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_portal_documents_created_at ON portal_documents(created_at DESC)`);
 };
 
 const createTablesPostgres = async () => {
@@ -155,16 +163,24 @@ const createTablesPostgres = async () => {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`,
   );
+  // Indexes for common query patterns
+  await run(`CREATE INDEX IF NOT EXISTS idx_health_data_created_at ON health_data(created_at DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_health_data_type ON health_data(type)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_daily_notes_created_at ON daily_notes(created_at DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_medical_timeline_event_date ON medical_timeline(event_date DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_medical_timeline_created_at ON medical_timeline(created_at DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_body_measurements_event_date ON body_measurements(event_date DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_portal_documents_created_at ON portal_documents(created_at DESC)`);
 };
 
 async function initDb() {
   if (usePostgres) {
     await connectPostgres();
     await createTablesPostgres();
-    try { await run(`ALTER TABLE medical_timeline ALTER COLUMN event_date DROP NOT NULL`); } catch (_) {}
-    try { await run(`ALTER TABLE medical_timeline ADD COLUMN IF NOT EXISTS date_text TEXT`); } catch (_) {}
-    try { await run(`ALTER TABLE body_measurements ADD COLUMN IF NOT EXISTS date_text TEXT`); } catch (_) {}
-    try { await run(`ALTER TABLE portal_documents ADD COLUMN IF NOT EXISTS family_person_id TEXT`); } catch (_) {}
+    try { await run(`ALTER TABLE medical_timeline ALTER COLUMN event_date DROP NOT NULL`); } catch (err) { if (process.env.NODE_ENV !== 'production') console.debug('Migration skipped (already applied):', err.message); }
+    try { await run(`ALTER TABLE medical_timeline ADD COLUMN IF NOT EXISTS date_text TEXT`); } catch (err) { if (process.env.NODE_ENV !== 'production') console.debug('Migration skipped (already applied):', err.message); }
+    try { await run(`ALTER TABLE body_measurements ADD COLUMN IF NOT EXISTS date_text TEXT`); } catch (err) { if (process.env.NODE_ENV !== 'production') console.debug('Migration skipped (already applied):', err.message); }
+    try { await run(`ALTER TABLE portal_documents ADD COLUMN IF NOT EXISTS family_person_id TEXT`); } catch (err) { if (process.env.NODE_ENV !== 'production') console.debug('Migration skipped (already applied):', err.message); }
   } else {
     await initSqlite();
     await createTablesSqlite();
@@ -194,7 +210,7 @@ async function initDb() {
         await run(`COMMIT`);
       }
     } catch (err) {
-      try { await run(`ROLLBACK`); } catch (_) {}
+      try { await run(`ROLLBACK`); } catch (rbErr) { console.warn('ROLLBACK failed:', rbErr.message); }
       console.warn('SQLite timeline migration skipped:', err.message);
     }
 

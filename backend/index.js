@@ -5,6 +5,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { initDb, all, run, isPostgres, getSqlitePath } = require('./db');
 const { parseAppleHealth } = require('./parsers/apple_health');
 const { parseCSVHealth } = require('./parsers/csv_parser');
@@ -24,7 +25,6 @@ const {
 const app = express();
 const port = process.env.PORT || 3001;
 
-console.log("App using API Key starting with:", process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 5) : "UNDEFINED");
 const uploadsRoot = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 
 const sniffFileForCDA = (filePath) => {
@@ -80,10 +80,37 @@ const tableColumns = {
     body_measurements: ['id', 'event_date', 'date_text', 'measurement_text', 'created_at']
 };
 
+// Simple in-memory rate limiter (windowMs / max requests per IP)
+const rateLimitStore = new Map();
+const createRateLimiter = ({ windowMs = 15 * 60 * 1000, max = 100 } = {}) => (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+    const entry = rateLimitStore.get(ip) || { count: 0, resetAt: now + windowMs };
+    if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + windowMs; }
+    entry.count += 1;
+    rateLimitStore.set(ip, entry);
+    if (entry.count > max) {
+        return res.status(429).json({ error: 'Too many requests, please try again later.' });
+    }
+    next();
+};
+
 // Middleware
-app.use(cors());
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+    : null;
+app.use(cors({
+    origin: allowedOrigins
+        ? (origin, cb) => {
+            // allow same-origin (no Origin header) and whitelisted origins
+            if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+            cb(new Error('CORS: origin not allowed'));
+        }
+        : true, // dev fallback: allow all
+    credentials: true,
+}));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan('dev'));
 
 // Debug all API requests
@@ -121,27 +148,68 @@ app.get('/api/ai/status', (req, res) => {
     });
 });
 
+// Auth helpers — credentials must be set via AUTH_USERNAME / AUTH_PASSWORD env vars.
+// AUTH_SECRET is used to sign session tokens; falls back to a random secret per process
+// (tokens become invalid on server restart when not set).
+const AUTH_SECRET = process.env.AUTH_SECRET || crypto.randomBytes(32).toString('hex');
+const AUTH_USERNAME = process.env.AUTH_USERNAME || 'admin';
+const AUTH_PASSWORD = process.env.AUTH_PASSWORD || '';
+
+if (!process.env.AUTH_PASSWORD) {
+    console.warn('[AUTH] AUTH_PASSWORD env var not set — login endpoint is effectively disabled.');
+}
+
+const signToken = (username) => {
+    const payload = Buffer.from(JSON.stringify({ username, iat: Date.now() })).toString('base64url');
+    const sig = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('base64url');
+    return `${payload}.${sig}`;
+};
+
+const verifyToken = (token) => {
+    if (!token || typeof token !== 'string') return null;
+    const [payload, sig] = token.split('.');
+    if (!payload || !sig) return null;
+    const expected = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('base64url');
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+    try { return JSON.parse(Buffer.from(payload, 'base64url').toString()); } catch { return null; }
+};
+
+// Stricter rate limit for auth and AI endpoints
+const authLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20 });
+const aiLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10 });
+
 // Login Route
-app.post('/api/login', (req, res) => {
+app.post('/api/login', authLimiter, (req, res) => {
     const { username, password } = req.body;
-    if (username === 'admin' && password === 'admin123') {
-        res.json({ success: true, token: 'mock-jwt-token' });
+    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ success: false, error: 'Username and password required' });
+    }
+    if (!AUTH_PASSWORD) {
+        return res.status(503).json({ success: false, error: 'Authentication not configured on server' });
+    }
+    const usernameMatch = crypto.timingSafeEqual(
+        Buffer.from(username.padEnd(64)),
+        Buffer.from(AUTH_USERNAME.padEnd(64))
+    );
+    const passwordMatch = crypto.timingSafeEqual(
+        Buffer.from(password.padEnd(128)),
+        Buffer.from(AUTH_PASSWORD.padEnd(128))
+    );
+    if (usernameMatch && passwordMatch) {
+        res.json({ success: true, token: signToken(username) });
     } else {
         res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
 });
 
-app.post('/api/meals/generate-ai', async (req, res) => {
+app.post('/api/meals/generate-ai', aiLimiter, async (req, res) => {
     try {
         const result = await generateMealPlanWithAI(req.body || {});
         res.json(result);
     } catch (error) {
         console.error('AI meal generation failed:', error);
         const statusCode = /missing/i.test(error.message) || /api key/i.test(error.message) ? 400 : 500;
-        res.status(statusCode).json({
-            error: 'Unable to generate AI meal plan',
-            details: error.message,
-        });
+        res.status(statusCode).json({ error: error.message || 'Unable to generate AI meal plan' });
     }
 });
 
@@ -261,15 +329,28 @@ app.post('/api/data/delete-bulk', async (req, res) => {
     if (!ids || !Array.isArray(ids)) return res.status(400).json({ error: 'IDs array required' });
     if (ids.length === 0) return res.json({ message: 'No records selected', deletedCount: 0 });
 
+    // Validate all IDs are integers
+    const intIds = ids.map((id) => Number.parseInt(id, 10));
+    if (intIds.some((id) => !Number.isInteger(id))) {
+        return res.status(400).json({ error: 'All IDs must be integers' });
+    }
+
     try {
         if (isPostgres()) {
-            const result = await run("DELETE FROM health_data WHERE id = ANY($1::int[])", [ids]);
+            const result = await run("DELETE FROM health_data WHERE id = ANY($1::int[])", [intIds]);
             return res.json({ message: 'Bulk deletion successful', deletedCount: result.rowCount });
         }
 
-        const placeholders = buildSqlPlaceholders(ids.length);
-        const result = await run(`DELETE FROM health_data WHERE id IN (${placeholders})`, ids);
-        res.json({ message: 'Bulk deletion successful', deletedCount: result.changes });
+        const placeholders = buildSqlPlaceholders(intIds.length);
+        await run('BEGIN');
+        try {
+            const result = await run(`DELETE FROM health_data WHERE id IN (${placeholders})`, intIds);
+            await run('COMMIT');
+            res.json({ message: 'Bulk deletion successful', deletedCount: result.changes });
+        } catch (innerErr) {
+            await run('ROLLBACK');
+            throw innerErr;
+        }
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -291,6 +372,7 @@ app.get('/api/notes', async (req, res) => {
 app.post('/api/notes', async (req, res) => {
     const text = (req.body.text || '').trim();
     if (!text) return res.status(400).json({ error: 'Note text required' });
+    if (text.length > 10000) return res.status(400).json({ error: 'Note text too long (max 10000 characters)' });
     try {
         if (isPostgres()) {
             const saved = await run("INSERT INTO daily_notes (note_text) VALUES ($1) RETURNING *", [text]);
@@ -324,6 +406,10 @@ app.post('/api/timeline', async (req, res) => {
     const details = (req.body.details || '').trim();
     const category = (req.body.category || '').trim();
     if (!title) return res.status(400).json({ error: 'title required' });
+    if (title.length > 500) return res.status(400).json({ error: 'title too long (max 500 characters)' });
+    if (details.length > 10000) return res.status(400).json({ error: 'details too long (max 10000 characters)' });
+    if (dateText && dateText.length > 200) return res.status(400).json({ error: 'dateText too long (max 200 characters)' });
+    if (category && category.length > 100) return res.status(400).json({ error: 'category too long (max 100 characters)' });
 
     try {
         if (isPostgres()) {
@@ -362,6 +448,7 @@ app.post('/api/measurements', async (req, res) => {
     const dateText = (req.body.dateText || '').trim() || null;
     const measurementText = (req.body.measurementText || '').trim();
     if (!measurementText) return res.status(400).json({ error: 'measurementText required' });
+    if (measurementText.length > 2000) return res.status(400).json({ error: 'measurementText too long (max 2000 characters)' });
 
     try {
         if (isPostgres()) {
@@ -447,8 +534,12 @@ app.delete('/api/portal/documents/:id', async (req, res) => {
     try {
         const removed = await deletePortalDocument(id);
         if (!removed) return res.status(404).json({ error: 'Document not found' });
-        if (removed.stored_path && fs.existsSync(removed.stored_path)) {
-            try { fs.unlinkSync(removed.stored_path); } catch (_) {}
+        if (removed.stored_path) {
+            const resolvedPath = path.resolve(removed.stored_path);
+            const resolvedRoot = path.resolve(uploadsRoot);
+            if (resolvedPath.startsWith(resolvedRoot + path.sep) && fs.existsSync(resolvedPath)) {
+                try { fs.unlinkSync(resolvedPath); } catch (err) { console.warn('Failed to delete file:', err.message); }
+            }
         }
         res.json({ success: true, id });
     } catch (err) {
@@ -528,7 +619,7 @@ app.get('/api/export/csv', async (req, res) => {
 });
 
 // Comprehensive AI Coach Synthesis
-app.post('/api/ai/coach', async (req, res) => {
+app.post('/api/ai/coach', aiLimiter, async (req, res) => {
     const { metrics, medicalHistory, ecgHistory, cdaHistory, dailyNote, timeline, bodyMeasurements } = req.body;
 
     try {
@@ -582,11 +673,15 @@ app.post('/api/ai/coach', async (req, res) => {
         const text = response.text();
         const jsonMatch = text.match(/\{[\s\S]*\}/);
 
-        if (jsonMatch) {
-            res.json(JSON.parse(jsonMatch[0]));
-        } else {
-            throw new Error("Invalid AI format");
+        if (!jsonMatch) throw new Error('AI returned an unrecognized format');
+
+        let parsed;
+        try {
+            parsed = JSON.parse(jsonMatch[0]);
+        } catch (parseErr) {
+            throw new Error(`Failed to parse AI response as JSON: ${parseErr.message}`);
         }
+        res.json(parsed);
     } catch (error) {
         console.error("Coach Synthesis error:", error);
         res.status(500).json({ error: error.message });
@@ -594,10 +689,13 @@ app.post('/api/ai/coach', async (req, res) => {
 });
 
 // AI Coach Q&A
-app.post('/api/ai/ask', async (req, res) => {
+app.post('/api/ai/ask', aiLimiter, async (req, res) => {
     const { question, metrics, medicalHistory, ecgHistory, cdaHistory, dailyNotes, timeline, bodyMeasurements } = req.body;
     if (!question || !String(question).trim()) {
         return res.status(400).json({ error: 'Question required' });
+    }
+    if (String(question).trim().length > 2000) {
+        return res.status(400).json({ error: 'Question too long (max 2000 characters)' });
     }
 
     try {
